@@ -13,5 +13,7 @@ namespace AutoCollider
         Capsule = 3,
         /// <summary>Convex MeshCollider (≤ 255 triangles).</summary>
         ConvexHull = 4,
+        /// <summary>Simplified (concave) MeshCollider — static or kinematic objects only.</summary>
+        OptimizedMesh = 5,
     }
 }

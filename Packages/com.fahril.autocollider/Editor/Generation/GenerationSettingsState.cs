@@ -23,9 +23,18 @@ namespace AutoCollider.Editor
 
         public void SaveState() => Save(true);
 
+        /// <summary>Back to the project's default preset (Project Settings), or the built-in defaults.</summary>
         public void ResetToDefaults()
         {
-            _settings = new GenerationSettings();
+            var preset = AutoColliderSettings.instance.Data.DefaultPreset;
+            _settings = preset != null ? preset.Settings.Clone() : new GenerationSettings();
+            SaveState();
+        }
+
+        /// <summary>Replace every setting with a copy of <paramref name="settings"/> (e.g. from a preset asset).</summary>
+        public void Replace(GenerationSettings settings)
+        {
+            _settings = settings.Clone();
             SaveState();
         }
     }

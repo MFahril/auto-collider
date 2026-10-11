@@ -10,7 +10,7 @@ namespace AutoCollider.Editor
     internal static class ShapeDrawing
     {
         private const int ArcSegments = 16;
-        private static readonly ConditionalWeakTable<ConvexHull, Vector3[]> HullEdges = new();
+        private static readonly ConditionalWeakTable<object, Vector3[]> MeshEdges = new();
 
         /// <param name="scaledToWorld">Target scaled-space → world matrix (position + rotation, no scale).</param>
         public static void Draw(FittedShape shape, Matrix4x4 scaledToWorld, Color color)
@@ -32,7 +32,8 @@ namespace AutoCollider.Editor
                         DrawCapsule(shape.Direction, shape.Radius, shape.Height);
                         break;
                     case ShapeKind.ConvexMesh:
-                        Handles.DrawLines(Edges(shape.Hull));
+                    case ShapeKind.ConcaveMesh:
+                        Handles.DrawLines(Edges(shape));
                         break;
                 }
             }
@@ -82,25 +83,28 @@ namespace AutoCollider.Editor
             return points;
         }
 
-        private static Vector3[] Edges(ConvexHull hull)
+        /// <summary>Unique edges of a mesh shape as line-segment pairs, cached per hull / mesh object.</summary>
+        private static Vector3[] Edges(FittedShape shape)
         {
-            if (HullEdges.TryGetValue(hull, out var cached)) return cached;
+            object key = shape.Kind == ShapeKind.ConvexMesh ? shape.Hull : shape.Mesh;
+            if (MeshEdges.TryGetValue(key, out var cached)) return cached;
 
+            var vertices = shape.MeshVertices;
+            var t = shape.MeshTriangles;
             var seen = new HashSet<(int, int)>();
             var segments = new List<Vector3>();
-            var t = hull.Triangles;
-            for (var i = 0; i < t.Length; i += 3)
+            for (var i = 0; i + 2 < t.Length; i += 3)
             for (var e = 0; e < 3; e++)
             {
                 var a = t[i + e];
                 var b = t[i + (e + 1) % 3];
                 if (!seen.Add(a < b ? (a, b) : (b, a))) continue;
-                segments.Add((float3)hull.Vertices[a]);
-                segments.Add((float3)hull.Vertices[b]);
+                segments.Add((float3)vertices[a]);
+                segments.Add((float3)vertices[b]);
             }
 
             var array = segments.ToArray();
-            HullEdges.Add(hull, array);
+            MeshEdges.Add(key, array);
             return array;
         }
     }

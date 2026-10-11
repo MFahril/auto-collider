@@ -165,6 +165,27 @@ namespace AutoCollider.Editor.Tests
         }
 
         [Test]
+        public void DenseInput_IsThinned_ButPrimitivesStillEncloseEveryPoint()
+        {
+            var points = TestShapes.UvSphere(1f, 120, 240).Concat(TestShapes.RandomInBox(4, 6000, new float3(1.2f, 0.4f, 0.3f))).ToArray();
+            var input = FitInput.Create(new MeshGeometry("dense", points, new int[0]));
+            Assert.That(input.IsReduced, "Input should exceed the hull budget");
+            var context = new FitContext(true);
+
+            var box = BoxStrategy.FitBox(input, context);
+            var sphere = SphereStrategy.FitSphere(input);
+            var capsule = CapsuleStrategy.FitCapsule(input, context);
+
+            TestShapes.AssertBoxContains(new BoxFit { Center = box.Center, Rotation = box.Rotation, Size = box.Size }, points);
+            TestShapes.AssertSphereContains(new SphereFit { Center = sphere.Center, Radius = sphere.Radius }, points);
+            TestShapes.AssertCapsuleContains(new CapsuleFit
+            {
+                Center = capsule.Center, Rotation = capsule.Rotation, Direction = capsule.Direction,
+                Radius = capsule.Radius, Height = capsule.Height,
+            }, points);
+        }
+
+        [Test]
         public void ConvexHullStrategy_FlatGeometry_FallsBackToBox()
         {
             var quad = new[] { new float3(0, 0, 0), new float3(1, 0, 0), new float3(0, 0, 1), new float3(1, 0, 1) };

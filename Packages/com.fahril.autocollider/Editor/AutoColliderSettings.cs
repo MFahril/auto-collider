@@ -46,7 +46,10 @@ namespace AutoCollider.Editor
         [Tooltip("Name of the child GameObject that holds generated colliders.")]
         public string ContainerName = DefaultContainerName;
 
-        [Tooltip("Live preview is skipped for meshes above this triangle count; use the Preview button instead.")]
+        [Tooltip("Preset applied by \"Reset to Defaults\" in the Auto Collider window (empty = built-in Balanced defaults). Share it with your team.")]
+        public ColliderPreset DefaultPreset;
+
+        [Tooltip("Live preview is skipped for meshes above this triangle count.")]
         [Min(1000)]
         public int PreviewTriangleBudget = 200_000;
 

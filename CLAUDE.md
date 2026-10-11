@@ -42,7 +42,7 @@ Packages/com.fahril.autocollider/
     PackagePaths.cs            every hard-coded asset path (package root, USS, settings asset)
     AutoColliderSettings.cs    project settings singleton + AutoColliderSettingsData
     Core/                      MeshSource, MeshGeometry, TargetSpace, Fitting/ (box/sphere/capsule), QuickHull3D (pure math)
-    Optimization/              simplifier, weld/clean, inflate, decomposition, error metric, stats
+    Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer, stats
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store
     Editing/                   EditorTool, handles, picking, overlay, paint, operations
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
@@ -159,7 +159,8 @@ Use this when designing fitters, writers, and validators.
 2. After code changes, verify through **Unity-MCP**:
    - `refresh_unity` (compile) → `read_console` → **zero errors, zero new warnings** (the MCP bridge's own "WebSocket" reconnect warnings during domain reload are not ours).
    - `run_tests` (EditMode, assembly `AutoCollider.Editor.Tests`) → all green.
-   - For UI/scene features, exercise them in `Assets/AutoCollider Dev/M1 Test Scene.unity` (primitive props: table, tilted chair, squashed / scaled objects) via `execute_code` / `manage_scene`, and screenshot with `manage_camera` (`capture_source: scene_view`). Leave the scene clean (no generated colliders) and reopen the user's scene afterwards.
+   - For UI/scene features, exercise them in `Assets/AutoCollider Dev/M1 Test Scene.unity` (primitive props: table, tilted chair, squashed / scaled objects; dense `Rock` mesh with and without a MeshCollider for optimization) via `execute_code` / `manage_scene`, and screenshot with `manage_camera` (`capture_source: scene_view`). Leave the scene clean (no generated colliders, original meshes on colliders), delete generated test meshes (`Assets/AutoCollider/`), and reopen the user's scene afterwards.
+   - `execute_code` compiles as **C# 6** (CodeDom): no local functions / pattern matching — use `System.Func` lambdas. Set `Selection` in one call and drive the UI in the next (selection events fire between calls). Find UI controls by label/class, never "first FloatField" — bound PropertyFields contain FloatFields too and you would edit the user's settings.
 3. Required tests per area:
    - Fitters: cube → exact box; UV sphere → sphere radius within 1%; cylinder mesh → capsule axis correct; rotated cube → OBB recovers rotation.
    - QuickHull: face count ≤ 255, all input points inside/on hull.
@@ -170,4 +171,33 @@ Use this when designing fitters, writers, and validators.
 5. Unity-MCP `execute_code` blocks `AssetDatabase.DeleteAsset` unless `safety_checks: false`; only disable it for paths you created.
 6. Never mark work done with compile errors or failing tests — report them.
 7. Don't modify `Assets/Mystery Studio/` (third-party reference, not committed) or `Library/`, `Temp/`, `*.csproj`.
-8. Commits: only when the user asks. Plain messages, **no Claude attribution / Co-Authored-By trailers**. Commit only project files (package, docs, dev scene) — never unrelated local changes (e.g. the user's manifest / render-pipeline edits).
+8. Commits follow §6.
+
+---
+
+## 6. Commit rules
+
+The user ships one commit per finished milestone and owns the history.
+
+1. **When:** after a milestone is done (or when the user asks) — never mid-milestone, never with failing tests.
+2. **Pre-commit checklist** (all must be true):
+   - Compiles with zero errors / zero new warnings; all EditMode tests green (state the count in the message).
+   - `Docs/ROADMAP.md`: milestone tasks ticked, status ✅, *Done when* verified, Log line added.
+   - `Docs/ARCHITECTURE_PLAN.md` and this file updated if the design / rules changed.
+   - Package version bumped — one **minor** per milestone (M1 = 0.2.0, M2 = 0.3.0, …) — and `CHANGELOG.md` + package `README.md` updated.
+   - Dev scene saved clean; generated test assets (`Assets/AutoCollider/`, `Assets/__AutoCollider*`) deleted.
+3. **Authorship:** the user's git identity only. **Never** add `Co-Authored-By`, "Generated with Claude Code", or any AI attribution — not in the subject, body or trailers.
+4. **Stage explicitly by path — never `git add -A` / `git add .`:**
+   - Include: `Packages/com.fahril.autocollider/`, `Docs/`, `CLAUDE.md`, `Assets/AutoCollider Dev/` (+ `.meta`).
+   - Exclude: the user's own local edits (`Packages/manifest.json`, `Packages/packages-lock.json`, `Assets/Settings/*`, `ProjectSettings/QualitySettings.asset`), third-party `Assets/Mystery Studio/`, Unity-generated `ProjectSettings/SceneTemplateSettings.json`, `Temp/`, `Library/`, `UserSettings/`. Run `git diff --cached --stat` and check before committing.
+5. **Message format:**
+   ```
+   <Imperative summary of the milestone> (package X.Y.Z)        ← ≤ 72 chars
+
+   - What was added / changed, one bullet per feature area
+   - Notable fixes or behavior changes
+   - N EditMode tests
+   ```
+   No trailers. Pass the message with a heredoc (`git commit -F -`) so formatting survives.
+6. **Push:** `git push origin main` right after the commit. Never force-push, never amend or rewrite a pushed commit — fix forward with a new commit.
+7. **Verify:** `git log -1 --format='%an%n%B'` shows the user as author and no attribution lines.

@@ -114,9 +114,9 @@ namespace AutoCollider.Editor
                     var current = stack.Pop();
                     visible.Add(current);
                     var f = faces[current];
-                    var faceEdges = new[] { new int2(f.A, f.B), new int2(f.B, f.C), new int2(f.C, f.A) };
-                    foreach (var e in faceEdges)
+                    for (var k = 0; k < 3; k++)
                     {
+                        var e = Edge(f, k);
                         if (!edges.TryGetValue(Key(e.y, e.x), out var neighbor)) continue;
                         if (visited.Contains(neighbor)) continue;
                         if (faces[neighbor].Distance(p[eye]) > eps)
@@ -126,14 +126,17 @@ namespace AutoCollider.Editor
                         }
                     }
                 }
-                var visibleSet = new HashSet<int>(visible);
+
+                // Every visited face is visible, so `visited` doubles as the visible-set lookup.
                 foreach (var vi in visible)
                 {
                     var f = faces[vi];
-                    var faceEdges = new[] { new int2(f.A, f.B), new int2(f.B, f.C), new int2(f.C, f.A) };
-                    foreach (var e in faceEdges)
-                        if (edges.TryGetValue(Key(e.y, e.x), out var neighbor) && !visibleSet.Contains(neighbor))
+                    for (var k = 0; k < 3; k++)
+                    {
+                        var e = Edge(f, k);
+                        if (edges.TryGetValue(Key(e.y, e.x), out var neighbor) && !visited.Contains(neighbor))
                             horizon.Add(e);
+                    }
                 }
 
                 // Remove visible faces, keep their outside points for reassignment.
@@ -197,15 +200,14 @@ namespace AutoCollider.Editor
         /// </summary>
         public static bool TryBuildCapped(IReadOnlyList<float3> points, int maxTriangles, out ConvexHull hull)
         {
-            if (!TryBuild(points, out hull)) return false;
+            // The capped result is approximate anyway, so very dense input is thinned first (hull cost grows with hull points).
+            if (!TryBuild(ReducePoints(points, MaxCappedInput), out hull)) return false;
             if (hull.TriangleCount <= maxTriangles) return true;
 
             var source = hull.Vertices;
             GeometryUtils.MinMax(source, out var min, out var max);
             var diagonal = math.length(max - min);
-            var centroid = float3.zero;
-            foreach (var v in source) centroid += v;
-            centroid /= source.Length;
+            var centroid = Centroid(source);
 
             var cell = diagonal / 24f;
             for (var iteration = 0; iteration < 64; iteration++)
@@ -219,6 +221,41 @@ namespace AutoCollider.Editor
                 cell *= 1.2f;
             }
             return hull.TriangleCount <= maxTriangles;
+        }
+
+        /// <summary>Input size above which <see cref="TryBuildCapped"/> thins points before building.</summary>
+        public const int MaxCappedInput = 4096;
+
+        /// <summary>
+        /// At most <paramref name="maxPoints"/> points that keep the outline: grid clustering, keeping per cell the point
+        /// furthest from the centroid. Returns the input unchanged when it is already small enough.
+        /// </summary>
+        public static IReadOnlyList<float3> ReducePoints(IReadOnlyList<float3> points, int maxPoints)
+        {
+            if (points.Count <= maxPoints) return points;
+
+            var source = new float3[points.Count];
+            for (var i = 0; i < source.Length; i++) source[i] = points[i];
+            GeometryUtils.MinMax(source, out var min, out var max);
+            var diagonal = math.length(max - min);
+            if (diagonal <= 0f) return points;
+            var centroid = Centroid(source);
+
+            var cell = diagonal / 64f;
+            float3[] reduced;
+            do
+            {
+                reduced = ClusterFurthest(source, min, cell, centroid);
+                cell *= 1.25f;
+            } while (reduced.Length > maxPoints);
+            return reduced;
+        }
+
+        private static float3 Centroid(float3[] points)
+        {
+            var sum = float3.zero;
+            foreach (var v in points) sum += v;
+            return sum / math.max(1, points.Length);
         }
 
         private static float3[] ClusterFurthest(float3[] source, float3 origin, float cell, float3 centroid)
@@ -314,6 +351,13 @@ namespace AutoCollider.Editor
         }
 
         private static long Key(int from, int to) => ((long)from << 32) | (uint)to;
+
+        private static int2 Edge(Face f, int k) => k switch
+        {
+            0 => new int2(f.A, f.B),
+            1 => new int2(f.B, f.C),
+            _ => new int2(f.C, f.A),
+        };
 
         private static void RemoveEdge(Dictionary<long, int> edges, int from, int to, int face)
         {

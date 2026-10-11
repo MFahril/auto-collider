@@ -39,7 +39,15 @@ namespace AutoCollider.Editor
             var allowRotation = settings.AllowRotation && space.IsUniform;
             if (settings.AllowRotation && !space.IsUniform) result.Warn(Strings.WarningNonUniformScale);
             var context = new FitContext(allowRotation);
-            var strategy = StrategyRegistry.Get(settings.Strategy);
+
+            var strategyKind = settings.Strategy;
+            if (strategyKind == ColliderStrategy.OptimizedMesh && IsDynamic(target))
+            {
+                // PhysX: non-kinematic Rigidbodies cannot use concave mesh colliders.
+                result.Warn(Strings.WarningDynamicConcave);
+                strategyKind = ColliderStrategy.ConvexHull;
+            }
+            var strategy = StrategyRegistry.Get(strategyKind, settings);
 
             var parts = new List<MeshGeometry>(renderers.Count);
             foreach (var renderer in renderers)
@@ -64,13 +72,35 @@ namespace AutoCollider.Editor
                 var shapes = strategy.Fit(FitInput.Create(part), context);
                 for (var i = 0; i < shapes.Count; i++)
                 {
-                    shapes[i].Label = shapes.Count == 1 ? part.Label : $"{part.Label} {i + 1}";
-                    result.Shapes.Add(shapes[i]);
+                    var shape = shapes[i];
+                    shape.Label = shapes.Count == 1 ? part.Label : $"{part.Label} {i + 1}";
+
+                    // The optimized-mesh path inflates inside the optimizer; everything else is inflated here.
+                    if (shape.Kind != ShapeKind.ConcaveMesh) InflateDeflate.Apply(shape, settings.Inflate);
+                    if (shape.Kind == ShapeKind.ConvexMesh && shape.Stats == null) MeasureMesh(shape, part);
+                    if (shape.Stats.HasValue) result.Stats.Add(shape.Stats.Value);
+
+                    result.Shapes.Add(shape);
                 }
             }
 
             if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
             return result;
+        }
+
+        private static void MeasureMesh(FittedShape shape, MeshGeometry source)
+        {
+            var collider = new MeshGeometry(shape.Label, shape.MeshVertices, shape.MeshTriangles);
+            var measured = MeshOptimizer.Measure(source, collider);
+            shape.Stats = measured.Stats;
+            shape.Error = measured.Error;
+        }
+
+        /// <summary>True when a non-kinematic Rigidbody moves this object.</summary>
+        public static bool IsDynamic(GameObject target)
+        {
+            var body = target.GetComponentInParent<Rigidbody>();
+            return body != null && !body.isKinematic;
         }
     }
 }

@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> Status: 0.2.0 — milestone M1 (core generation). Optimization, convex decomposition and in-scene editing are on the way.
+> Status: 0.3.0 — milestones M1 (generation) and M2 (optimization) done. Convex decomposition and in-scene editing are on the way.
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -26,6 +26,12 @@ Unity editor tool to **generate, optimize and edit colliders** for one or many o
 | Sphere | Smallest enclosing sphere |
 | Capsule | Capsule along the best axis |
 | Convex Hull | Convex mesh ≤ 255 triangles (works with moving Rigidbodies) |
+| Optimized Mesh | Simplified copy of the mesh, keeps holes and concave shapes (static / kinematic objects) |
+
+## Optimizing existing mesh colliders
+**Window ▸ Optimize tab:** select objects (or choose *Whole Scene*), click **Analyze** to see triangles before → after, savings, accuracy and memory, turn on the **Error Heatmap** to see where the collider deviates, then **Optimize**. Optimized meshes are saved as assets and remember their original — **Restore Originals** puts it back.
+
+Tune with **Quality** (fewer ↔ more triangles), **Shape Fidelity** (keeps corners and edges), **Max Triangles**, **Inflate** and **Min Island Size** — or pick a preset (*High Quality, Balanced, Performance, Mobile*) and save your own as a `Collider Preset` asset to share with your team.
 
 ## Settings
-`Project Settings ▸ Auto Collider` — generated mesh folder, container name, preview budget, handle size and colors.
+`Project Settings ▸ Auto Collider` — generated mesh folder, container name, default preset, preview budget, handle size and colors.

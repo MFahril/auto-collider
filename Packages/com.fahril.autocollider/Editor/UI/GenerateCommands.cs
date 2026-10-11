@@ -52,7 +52,8 @@ namespace AutoCollider.Editor
 
             PreviewDrawer.Clear();
             var report = BatchProcessor.Generate(targets, settings);
-            Notify(Describe(report));
+            var stats = DescribeStats(report.Stats);
+            Notify(stats.Length > 0 ? Describe(report) + "\n" + stats : Describe(report));
             return report;
         }
 
@@ -73,6 +74,14 @@ namespace AutoCollider.Editor
             if (warnings > 0) text += string.Format(Strings.ReportWarnings, warnings);
             if (report.Canceled) text += Strings.ReportCanceled;
             return text + string.Format(Strings.ReportTime, report.Milliseconds);
+        }
+
+        /// <summary>"Triangles 65,536 → 4,812 (−93%) · max error 0.8 cm", or empty when no mesh colliders were made.</summary>
+        public static string DescribeStats(ColliderStats stats)
+        {
+            if (stats.SourceTriangles <= 0) return string.Empty;
+            return string.Format(Strings.StatsLine, stats.SourceTriangles, stats.ResultTriangles, stats.Savings * 100f,
+                Format.Distance(stats.MaxError));
         }
 
         private static void Notify(string message)

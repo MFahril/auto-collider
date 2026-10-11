@@ -15,6 +15,9 @@ namespace AutoCollider.Editor
         public double Milliseconds { get; set; }
         public bool Canceled { get; set; }
 
+        /// <summary>Accumulated mesh-collider statistics (a field so it can be added to in place).</summary>
+        public ColliderStats Stats;
+
         public int Count(TargetStatus status) => Results.FindAll(r => r.Status == status).Count;
     }
 
@@ -56,6 +59,7 @@ namespace AutoCollider.Editor
                         writer.Apply(result, settings);
                         report.TargetsChanged++;
                     }
+                    if (result.HasMeshStats) report.Stats.Add(result.Stats);
                     report.CollidersCreated += result.CollidersCreated;
                     report.CollidersRemoved += result.CollidersRemoved;
                     report.Results.Add(result);

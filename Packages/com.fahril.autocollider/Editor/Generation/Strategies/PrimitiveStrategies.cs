@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Mathematics;
 
 namespace AutoCollider.Editor
 {
@@ -12,10 +13,12 @@ namespace AutoCollider.Editor
 
         public static FittedShape FitBox(FitInput input, FitContext context)
         {
-            var aabb = BoxFitter.Aabb(input.HullPoints);
+            var aabb = BoxFitter.Aabb(input.Points);
             if (!context.AllowRotation) return FittedShape.FromBox(aabb);
 
             var oriented = input.Hull != null ? BoxFitter.MinVolume(input.HullPoints, input.Hull) : BoxFitter.Pca(input.Points);
+            // A thinned hull finds the orientation; the extents must still cover every point.
+            if (input.IsReduced) oriented = BoxFitter.InFrame(input.Points, new float3x3(oriented.Rotation));
             var useOriented = oriented.Volume < aabb.Volume * RotationGain && !GeometryUtils.IsNearIdentity(oriented.Rotation);
             return FittedShape.FromBox(useOriented ? oriented : aabb);
         }
@@ -26,7 +29,14 @@ namespace AutoCollider.Editor
     {
         public List<FittedShape> Fit(FitInput input, FitContext context) => new() { FitSphere(input) };
 
-        public static FittedShape FitSphere(FitInput input) => FittedShape.FromSphere(SphereFitter.Welzl(input.HullPoints));
+        public static FittedShape FitSphere(FitInput input)
+        {
+            var sphere = SphereFitter.Welzl(input.HullPoints);
+            if (input.IsReduced)
+                foreach (var p in input.Points)
+                    sphere.Radius = math.max(sphere.Radius, math.distance(p, sphere.Center));
+            return FittedShape.FromSphere(sphere);
+        }
     }
 
     /// <summary>Capsule along the best local axis, or the principal axis when rotation is allowed.</summary>
@@ -39,6 +49,17 @@ namespace AutoCollider.Editor
             var fit = context.AllowRotation
                 ? CapsuleFitter.BestOriented(input.HullPoints)
                 : CapsuleFitter.BestAxisAligned(input.HullPoints);
+
+            if (input.IsReduced)
+            {
+                // Keep the axis found on the thinned hull, re-fit radius and length over every point.
+                var axisLocal = float3.zero;
+                axisLocal[fit.Direction] = 1f;
+                var refit = CapsuleFitter.AlongDirection(input.Points, math.mul(fit.Rotation, axisLocal));
+                refit.Rotation = fit.Rotation;
+                refit.Direction = fit.Direction;
+                fit = refit;
+            }
             return FittedShape.FromCapsule(fit);
         }
     }

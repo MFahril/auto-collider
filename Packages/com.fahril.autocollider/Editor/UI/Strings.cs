@@ -35,6 +35,72 @@ namespace AutoCollider.Editor
         public const string WarningNonUniformScale = "Non-uniform scale: rotated shapes disabled for this object.";
         public const string WarningInvalidPattern = "Invalid exclude pattern \"{0}\" was ignored.";
         public const string WarningMeshReadFailed = "Could not read mesh on \"{0}\": {1}";
+        public const string WarningDynamicConcave = "Moving Rigidbodies can't use concave mesh colliders — used a convex hull instead.";
+        public const string ProblemHullFailed = "Mesh is flat or too small for a convex hull.";
+
+        // Statistics
+        public const string StatsLine = "Triangles {0:N0} → {1:N0} (−{2:0}%) · max error {3}";
+        public const string MemoryLine = "Collision memory ≈ {0} → {1}";
+
+        // Presets
+        public const string PresetLabel = "Preset";
+        public const string PresetButton = "Presets ▾";
+        public const string PresetButtonTooltip = "Apply a built-in or project preset, or save the current settings as a preset asset.";
+        public const string PresetCurrentTooltip = "Built-in presets set mesh quality, shape fidelity and the triangle limit.";
+        public const string PresetCustom = "Custom";
+        public const string PresetHighQuality = "High Quality";
+        public const string PresetHighQualityInfo = "Detailed, accurate meshes";
+        public const string PresetBalanced = "Balanced";
+        public const string PresetBalancedInfo = "Good default";
+        public const string PresetPerformance = "Performance";
+        public const string PresetPerformanceInfo = "≤ 2,000 triangles";
+        public const string PresetMobile = "Mobile";
+        public const string PresetMobileInfo = "≤ 500 triangles";
+        public const string PresetNoAssets = "Project Presets/(none yet)";
+        public const string PresetProjectPrefix = "Project Presets/";
+        public const string PresetSaveAs = "Save Current as Preset…";
+        public const string PresetSaveTitle = "Save Collider Preset";
+        public const string PresetSaveMessage = "Save the current Auto Collider settings as a preset asset.";
+
+        // Mesh optimization
+        public const string SectionMeshOptimization = "Mesh Optimization";
+        public const string MeshOptimizationHint = "Used by Optimized Mesh (and the Optimize tab). Lower quality = fewer triangles; higher fidelity keeps edges.";
+
+        // Optimize tab
+        public const string OptimizeHeader = "Mesh Colliders ({0})";
+        public const string ScopeSelection = "Selection";
+        public const string ScopeScene = "Whole Scene";
+        public const string ScopeTooltip = "Optimize mesh colliders under the selected objects, or in every open scene.";
+        public const string OptimizeEmpty = "Select objects that have Mesh Colliders (children are included).";
+        public const string OptimizeEmptyScene = "No Mesh Colliders in the open scenes.";
+        public const string OptimizeHintAnalyze = "Click Analyze to preview savings and accuracy before changing anything.";
+        public const string Analyze = "Analyze";
+        public const string AnalyzeTooltip = "Compute optimized meshes and statistics without changing the scene.";
+        public const string OptimizeButton = "Optimize ({0})";
+        public const string OptimizeTooltip = "Replace each collider's mesh with its optimized version (saved as an asset). One Undo step; originals can be restored.";
+        public const string RestoreButton = "Restore Originals ({0})";
+        public const string RestoreTooltip = "Put the original meshes back on colliders optimized by Auto Collider.";
+        public const string OptimizeDone = "Optimized {0} collider(s).";
+        public const string RestoreDone = "Restored {0} original mesh(es).";
+        public const string ProgressAnalyzeTitle = "Auto Collider — Analyzing";
+        public const string RowTriangles = "{0} · {1:N0} tris";
+        public const string RowBeforeAfter = "{0} · {1:N0} → {2:N0} · ±{3}";
+        public const string RowSavings = "−{0:0}%";
+        public const string RowAlreadyOptimal = "Optimal";
+        public const string RowOptimized = "Optimized";
+        public const string RowOptimizedTooltip = "Uses an optimized mesh made by Auto Collider (the original can be restored).";
+        public const string RowStatsTooltip = "Max error {0} · mean {1}\nMemory ≈ {2} → {3}\nTime {4:0} ms";
+        public const string Heatmap = "Error Heatmap";
+        public const string HeatmapTooltip = "Show how far the optimized collider is from the original surface: green = close, red = at or above the threshold.";
+        public const string HeatmapThreshold = "Red at (m)";
+        public const string HeatmapThresholdTooltip = "Distance (meters) shown as full red in the heatmap.";
+        public const string HeatmapLines = "Lines";
+        public const string HeatmapLinesTooltip = "Draw lines from the original surface to the collider where the error is noticeable.";
+
+        // Undo (optimize)
+        public const string UndoOptimize = "Auto Collider: Optimize Collider";
+        public const string UndoOptimizeCount = "Auto Collider: Optimize Colliders ({0})";
+        public const string UndoRestore = "Auto Collider: Restore Original Meshes";
 
         // Undo & progress
         public const string UndoGenerate = "Auto Collider: Generate";
@@ -50,7 +116,6 @@ namespace AutoCollider.Editor
         public const string TabOptimize = "Optimize";
         public const string TabEdit = "Edit";
         public const string TabDoctor = "Doctor";
-        public const string ComingOptimize = "Mesh collider optimization arrives in milestone M2.";
         public const string ComingEdit = "In-scene collider editing arrives in milestone M4.";
         public const string ComingDoctor = "The scene validator arrives in milestone M7.";
 
@@ -87,6 +152,7 @@ namespace AutoCollider.Editor
             ColliderStrategy.Sphere => "The smallest sphere around each mesh.",
             ColliderStrategy.Capsule => "A capsule along each mesh's longest direction.",
             ColliderStrategy.ConvexHull => "A convex mesh (≤ 255 triangles) wrapped around each mesh. Works with moving Rigidbodies.",
+            ColliderStrategy.OptimizedMesh => "A simplified copy of the mesh (keeps holes and concave shapes). Static or kinematic objects only — see Mesh Optimization.",
             _ => string.Empty,
         };
 

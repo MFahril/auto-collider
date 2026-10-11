@@ -55,6 +55,7 @@ namespace AutoCollider.Editor
             var folderWarning = new HelpBox(Strings.InvalidMeshFolder, HelpBoxMessageType.Warning);
             generation.Add(folderWarning);
             generation.Add(Field(data, nameof(AutoColliderSettingsData.ContainerName)));
+            generation.Add(Field(data, nameof(AutoColliderSettingsData.DefaultPreset)));
             generation.Add(Field(data, nameof(AutoColliderSettingsData.PreviewTriangleBudget)));
 
             var sceneView = Section(page, Strings.SectionSceneView);

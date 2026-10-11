@@ -8,6 +8,7 @@ namespace AutoCollider.Editor
         Sphere,
         Capsule,
         ConvexMesh,
+        ConcaveMesh,
     }
 
     /// <summary>
@@ -37,10 +38,32 @@ namespace AutoCollider.Editor
         /// <summary>Convex mesh data (≤ 255 triangles).</summary>
         public ConvexHull Hull;
 
-        /// <summary>Enclosed volume, used to compare fits.</summary>
+        /// <summary>Concave (optimized) mesh data.</summary>
+        public MeshGeometry Mesh;
+
+        /// <summary>Enclosed volume, used to compare fits (0 for concave meshes).</summary>
         public float Volume;
 
+        /// <summary>Before/after statistics for mesh shapes (null for primitives).</summary>
+        public ColliderStats? Stats;
+
+        /// <summary>Sampled deviation from the source mesh, for the heatmap (mesh shapes only).</summary>
+        public ErrorMetric.Result Error;
+
         public bool IsRotated => !GeometryUtils.IsNearIdentity(Rotation);
+
+        public bool IsMesh => Kind == ShapeKind.ConvexMesh || Kind == ShapeKind.ConcaveMesh;
+
+        /// <summary>Vertices / triangles of mesh shapes (hull or concave mesh); null for primitives.</summary>
+        public float3[] MeshVertices => Kind == ShapeKind.ConvexMesh ? Hull.Vertices : Mesh?.Vertices;
+
+        public int[] MeshTriangles => Kind == ShapeKind.ConvexMesh ? Hull.Triangles : Mesh?.Triangles;
+
+        public static FittedShape FromMesh(MeshGeometry mesh) => new()
+        {
+            Kind = ShapeKind.ConcaveMesh,
+            Mesh = mesh,
+        };
 
         public static FittedShape FromBox(BoxFit box) => new()
         {

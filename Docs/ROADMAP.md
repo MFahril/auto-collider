@@ -17,7 +17,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 |---|---|---|---|
 | M0 | Foundation | – | ✅ |
 | M1 | Core generation | 1, 3, 5 | ✅ |
-| M2 | Optimization | 2 | ⬜ |
+| M2 | Optimization | 2 | ✅ |
 | M3 | Convex decomposition | 2 | ⬜ |
 | M4 | Scene editing | 4 | ⬜ |
 | M5 | Paint & skinned | 4 | ⬜ |
@@ -84,19 +84,39 @@ Tests (60 EditMode, all green)
 
 ---
 
-## M2 — Optimization ⬜
+## M2 — Optimization ✅
 
-- [ ] `ClusterSimplifier` (Burst; grid clustering + quadric-error representatives; Quality → cell size, Fidelity → QEM blend)
-- [ ] `MeshCleaner` (weld ε, degenerate/duplicate tris, small islands)
-- [ ] `InflateDeflate` (angle-weighted normals)
-- [ ] `OptimizedMesh` strategy (concave, static/kinematic)
-- [ ] `ErrorMetric` (sampled max/mean) + `ColliderStats` (verts/tris/memory/bake ms/savings)
-- [ ] `ColliderPreset` ScriptableObject + built-ins (High Quality / Balanced / Performance / Mobile) + "Save as preset"; default preset in Project Settings
-- [ ] Optimize tab (existing MeshColliders table, before → after, batch optimize, save mesh)
-- [ ] Heatmap drawer (cached, Scene view)
-- [ ] Tests: bounds preserved, no degenerates, deterministic, error under threshold
+Optimization core (`Editor/Optimization`)
+- [x] `ClusterSimplifier` — Burst job: grid clustering; per-cell representative from area-weighted **quadrics** solved around the cell mean with a pseudo-inverse (corner → corner, edge → edge line, flat → plane), clamped to the cell; Quality → log-scaled cell size, Fidelity → mean ↔ quadric blend; `MaxTriangles` grows cells until it fits; deterministic
+- [x] `MeshCleaner` — weld ε, collapsed / duplicate (either winding) triangles, small-island removal (union-find)
+- [x] `InflateDeflate` — angle-weighted vertex normals for meshes; analytic grow / shrink for primitives
+- [x] `ErrorMetric` — Burst parallel closest-point-on-triangle over sampled source vertices (max / mean / per-sample)
+- [x] `ColliderStats` — triangles / vertices before → after, savings %, memory estimate, bake time
+- [x] `MeshOptimizer` pipeline (weld → islands → simplify → inflate → measure) + `OptimizeConvex` (capped hull)
+- [x] `ColliderOptimizer` — optimize **existing** MeshColliders: analyze (no changes) → apply (one Undo step, mesh saved as asset) → restore original; re-optimizing always starts from the original mesh (source tracked in `GeneratedMeshLibrary`)
 
-**Done when:** sample mesh −80% tris at Balanced with max error under threshold; output deterministic.
+Generation
+- [x] `OptimizedMesh` strategy (concave); dynamic Rigidbody → automatic convex fallback + warning
+- [x] Inflate applied to every strategy; mesh stats + error per shape, aggregated per target and batch
+- [x] Performance: lazy hull in `FitInput`; dense input (> 4,096 points) thinned before hulls, primitives re-fit extents over all points so they still enclose; QuickHull allocations removed (test suite 22 s → 5 s)
+
+Presets
+- [x] `ColliderPreset` asset (`Create ▸ Auto Collider ▸ Collider Preset`, "Save Current as Preset…")
+- [x] Built-ins High Quality / Balanced / Performance / Mobile (optimization values only; defaults = Balanced)
+- [x] Project Settings ▸ Default Preset (used by Reset to Defaults)
+
+UI
+- [x] Generate tab: preset row, Inflate, Mesh Optimization foldout, stats in preview hint / result / Scene notification
+- [x] Optimize tab: selection or whole-scene MeshCollider list, Analyze / Optimize / Restore Originals, per-row before → after + savings + error tooltip, totals with memory, error heatmap (threshold, lines)
+- [x] `HeatmapDrawer` (green → yellow → red, colour-bucketed `Handles.DrawLines`)
+
+Tests (84 EditMode, all green, ~5 s)
+- [x] Dense sphere at Balanced: ≥ 80 % fewer triangles, max error < 1.5 % of size, no degenerates, bounds within one cell
+- [x] Deterministic; quadric representatives ≥ 2× more accurate than averaging on a cube; MaxTriangles respected; quality monotonic
+- [x] Weld / degenerate / island removal; inflate (mesh + primitives); error metric; closest-point regions; presets; stats; units
+- [x] Scene: Optimized Mesh generation, dynamic fallback, inflate; optimize existing → apply / Undo / Redo / restore; convex existing; concave on dynamic body rejected; dense input still enclosed
+
+**Done when:** sample mesh −80% tris at Balanced with max error under threshold; output deterministic. → *Verified 2026-10-12: tests above, plus manual run on the dev scene's 39,200-triangle `Rock`: Balanced → 6,042 triangles (−85 %), max error 6.5 mm (mean 1.2 mm) on a ~2.8 m object, memory ≈ 846 KB → 130 KB, 40–55 ms; Optimize / Undo / Redo / Restore round-trip; heatmap renders; Optimized Mesh generation 140 ms.*
 
 ---
 
@@ -176,6 +196,8 @@ Tests (60 EditMode, all green)
 - Localization of `Strings`
 - Clean up orphaned generated meshes (undoing a convex generation leaves its mesh sub-asset behind) — `Tools ▸ Auto Collider ▸ Clean Unused Meshes`
 - Batch generation for prefab / model assets selected in the Project window (the writer is already prefab-aware)
+- Burst port of `QuickHull3D` (managed today; dense input is thinned first)
+- Error heatmap in the Generate tab live preview (Optimize tab has it)
 - Lower minimum Unity version (currently 6000.6 because of built-in Burst 2.0 / Collections 6.6 versions)
 
 ---
@@ -187,3 +209,4 @@ Tests (60 EditMode, all green)
 | 2026-10-12 | Docs | `CLAUDE.md`, `ARCHITECTURE_PLAN.md`, `ROADMAP.md` created |
 | 2026-10-12 | M0 ✅ | Package skeleton, assemblies, settings page, USS theme, 16 tests green |
 | 2026-10-12 | M1 ✅ | Fitters, QuickHull, pipeline, writer, ColliderGroup, batch + single Undo, window Generate tab, inspector, 60 tests green; package 0.2.0 |
+| 2026-10-12 | M2 ✅ | Burst QEM simplifier, cleaner, inflate, error metric + heatmap, Optimized Mesh strategy, Optimize tab (apply / restore), presets, 84 tests green; package 0.3.0 |

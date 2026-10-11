@@ -30,6 +30,11 @@ namespace AutoCollider.Editor
         public int CollidersCreated { get; set; }
         public int CollidersRemoved { get; set; }
 
+        /// <summary>Accumulated statistics of mesh shapes (a field so <see cref="ColliderStats.Add"/> mutates in place).</summary>
+        public ColliderStats Stats;
+
+        public bool HasMeshStats => Stats.SourceTriangles > 0;
+
         public void Skip(string reason)
         {
             Status = TargetStatus.Skipped;

@@ -3,6 +3,21 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-10-12
+
+### Added
+- Mesh collider optimization (M2):
+  - **Optimized Mesh** strategy — a simplified concave MeshCollider for static / kinematic objects (dynamic Rigidbodies fall back to a convex hull with a warning).
+  - Burst vertex-clustering simplifier with quadric-error representatives (keeps corners and edges), weld / degenerate clean-up and small-island removal.
+  - Settings: Quality, Shape Fidelity, Max Triangles, Inflate / Deflate, Min Island Size.
+- **Optimize tab**: optimize existing MeshColliders (selection or whole scene) — Analyze (no changes), Optimize (one Undo step, mesh saved as an asset), Restore Originals; before → after triangles, savings, max / mean error, memory estimate.
+- **Error heatmap** in the Scene view (green → red, adjustable threshold, error lines).
+- **Presets**: built-in High Quality / Balanced / Performance / Mobile, `Collider Preset` assets (save from the window or `Create ▸ Auto Collider ▸ Collider Preset`), Project Settings ▸ Default Preset.
+- Inflate / Deflate for every strategy; triangle and error statistics in the window, preview and Scene notification.
+
+### Changed
+- Dense meshes generate much faster: the convex hull is built lazily and from thinned points above 4,096 vertices; primitives still enclose every vertex.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

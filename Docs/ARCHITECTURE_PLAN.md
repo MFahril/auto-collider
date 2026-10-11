@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M1 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M2 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -223,18 +223,20 @@ See §6 for algorithm detail. Components:
 
 | Class | Purpose |
 |---|---|
-| `ClusterSimplifier` | Burst job: grid vertex clustering with **quadric error** representative per cell |
-| `MeshCleaner` | Weld by epsilon, drop degenerate/duplicate tris, optional remove islands < X% of bounds |
-| `InflateDeflate` | Offset along angle-weighted normals |
-| `ConvexDecomposer` | Voxel/grid split → hull per region → greedy merge of adjacent hulls → 256 guard |
-| `PrimitiveReplacer` | Part → box/sphere/capsule when fill ratio ≥ threshold |
-| `ErrorMetric` | Sampled source↔collider distance (max, mean); per-vertex for heatmap |
-| `ColliderStats` | verts/tris before→after, part count, estimated memory, bake ms, savings % |
+| `ClusterSimplifier` ✅ | Burst job: grid vertex clustering with a **quadric-error** representative per cell (pseudo-inverse solve around the cell mean) |
+| `MeshCleaner` ✅ | Weld by epsilon, drop degenerate/duplicate tris, optional remove islands < X% of bounds |
+| `InflateDeflate` ✅ | Offset meshes along angle-weighted normals; grow / shrink primitives analytically |
+| `ConvexDecomposer` (M3) | Voxel/grid split → hull per region → greedy merge of adjacent hulls → 256 guard |
+| `PrimitiveReplacer` (M3) | Part → box/sphere/capsule when fill ratio ≥ threshold |
+| `ErrorMetric` ✅ | Burst, parallel. Sampled source↔collider distance (max, mean); per-vertex for heatmap |
+| `ColliderStats` ✅ | verts/tris before→after, part count, estimated memory, bake ms, savings % |
+| `MeshOptimizer` ✅ | Pipeline: weld → islands → simplify → inflate → measure; `OptimizeConvex` = capped hull |
+| `ColliderOptimizer` ✅ | Optimize **existing** MeshColliders: analyze → apply (one Undo step, mesh asset remembers its source) → restore original |
 
 ### 5.3 Generation (criterion 3)
 
 - **`GenerationSettings`** (+ `ColliderPreset : ScriptableObject`): strategy, quality, shape fidelity, inflate, convex/decomposition grid, merge tolerance, primitive-replace threshold, include children, merge children, filters, placement, trigger, physic material, layer override, cooking options, LOD mode.
-  Built-in presets: **High Quality, Balanced (default), Performance, Mobile**. Users can save their own.
+  Built-in presets: **High Quality, Balanced (default), Performance, Mobile** — they set only Quality / Shape Fidelity / Max Triangles. `ColliderPreset` assets store full settings (save from the window); Project Settings ▸ Default Preset drives "Reset to Defaults".
 - **Strategies** (`IColliderStrategy.Fit(FitInput, FitContext) → List<FittedShape>`; `FitInput` = deduped points + full hull computed once):
   | Strategy | Output |
   |---|---|
@@ -243,7 +245,7 @@ See §6 for algorithm detail. Components:
   | `Sphere` ✅ | minimal enclosing sphere |
   | `Capsule` ✅ | best local axis, or PCA axis when rotation is allowed and ≥ 1 % tighter |
   | `ConvexHull` ✅ | one convex mesh (≤ 255 triangles); flat geometry falls back to a box |
-  | `OptimizedMesh` | simplified concave MeshCollider (static/kinematic only) |
+  | `OptimizedMesh` ✅ | simplified concave MeshCollider (static / kinematic only; dynamic Rigidbody → convex hull + warning) |
   | `ConvexDecomposition` | N convex parts (+ primitive replacement) |
   | `PerBone` | skinned: one shape per bone, parented to the bone |
   | **`Auto`** | picks per object (see §6.5) |
@@ -361,9 +363,9 @@ MeshData → Weld(ε) → ClusterSimplify(cell = f(Quality, bounds)) → Clean(d
 **Cluster simplification with quadrics** (improves on MCO's averaging):
 1. Grid over bounds; cell size from `Quality` (1 = tiny cells/no reduction, 0 = coarse).
 2. For every triangle, compute its plane quadric `Q = p pᵀ` (area-weighted) and add it to the cells of its 3 vertices.
-3. Per cell, representative = argmin `vᵀ Q v` (solve 3×3; if ill-conditioned, fall back to the mean). `Fidelity` blends mean ↔ QEM point and adds boundary/feature-edge weight so sharp edges survive.
+3. Per cell, representative = quadric minimizer **closest to the cell mean**: eigen-decompose the 3×3 part and pseudo-invert eigenvalues above 1e-3 × the largest (rank 3 → corner, rank 2 → onto the edge line, rank 1 → onto the plane), clamp to the cell. `Fidelity` blends mean ↔ this point. (A plain 3×3 inverse falls back to the mean on edges and rounds them off — measured 2× worse on a cube.)
 4. Remap indices, drop triangles whose 3 vertices fall into ≤ 2 cells, drop duplicate triangles.
-5. All steps as `IJobParallelFor`/`IJob` with Burst; hashing cells via `NativeParallelMultiHashMap<int3,int>`.
+5. One Burst `IJob` (`CompileSynchronously`, single-threaded for deterministic cluster ids) with `NativeHashMap<int3,int>`; `Max Triangles` re-runs with 1.2× larger cells until the budget fits. Weld / island removal run before, inflate after; error is measured by a parallel Burst closest-point job.
 
 ### 6.2 Convex hull (dynamic, single part)
 
@@ -432,7 +434,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 |---|---|---|
 | **M0** Foundation | Package skeleton, `package.json` (+ burst/collections/physics deps), 3 asmdefs, `Strings`, settings provider stub, USS theme file, remove empty `Assets/Auto Collider Generator/` | Package compiles; Project Settings page visible |
 | **M1** Core generation ✅ | `MeshSource`, AABB/PCA-OBB/min-OBB, Ritter/Welzl, capsule fitter, `QuickHull3D` (255 cap), strategies BestPrimitive/Box/Sphere/Capsule/ConvexHull, pipeline, `ColliderWriter`, `GeneratedMeshStore`, `ColliderGroup` (entries + ownership), `BatchProcessor` (selection, single Undo), window Generate tab, basic inspector | Generate for 10 selected objects, one Ctrl+Z reverts all; fitter tests pass |
-| **M2** Optimization | `ClusterSimplifier` (Burst, QEM), `MeshCleaner`, `InflateDeflate`, `OptimizedMesh` strategy, stats, presets (4 built-in + save), Optimize tab, heatmap | Sample mesh tris −80% at Balanced with max error under threshold; deterministic |
+| **M2** Optimization ✅ | `ClusterSimplifier` (Burst, QEM), `MeshCleaner`, `InflateDeflate`, `OptimizedMesh` strategy, stats, presets (4 built-in + save), Optimize tab, heatmap | Sample mesh tris −80% at Balanced with max error under threshold; deterministic |
 | **M3** Decomposition | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
 | **M4** Scene editing | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
 | **M5** Paint & skinned | Paint mode (brush/box triangle select), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |

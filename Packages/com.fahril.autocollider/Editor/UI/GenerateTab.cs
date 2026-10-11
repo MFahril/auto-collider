@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static AutoCollider.Editor.UiFactory;
 
 namespace AutoCollider.Editor
 {
@@ -27,6 +28,9 @@ namespace AutoCollider.Editor
         private readonly VisualElement _resultBox;
         private readonly Label _resultLabel;
         private readonly Foldout _resultDetails;
+        private readonly Label _resultStats;
+        private readonly PresetRow _presetRow;
+        private readonly Foldout _meshOptimization;
         private IVisualElementScheduledItem _pendingPreview;
 
         public GenerateTab()
@@ -56,6 +60,9 @@ namespace AutoCollider.Editor
             targetsSection.Add(_targetList);
 
             // Settings
+            _presetRow = new PresetRow(OnPresetApplied);
+            Add(_presetRow);
+
             var shapeSection = Section(this, Strings.SectionShape);
             shapeSection.Add(Field(settings, nameof(GenerationSettings.Strategy)));
             _strategyHint = new Label();
@@ -63,6 +70,16 @@ namespace AutoCollider.Editor
             shapeSection.Add(_strategyHint);
             shapeSection.Add(Field(settings, nameof(GenerationSettings.Granularity)));
             shapeSection.Add(Field(settings, nameof(GenerationSettings.AllowRotation)));
+            shapeSection.Add(Field(settings, nameof(GenerationSettings.Inflate)));
+
+            _meshOptimization = Foldout(this, Strings.SectionMeshOptimization, "AutoCollider.Generate.MeshOptimization");
+            var meshHint = new Label(Strings.MeshOptimizationHint);
+            meshHint.AddToClassList("ac-hint");
+            _meshOptimization.Add(meshHint);
+            _meshOptimization.Add(Field(settings, nameof(GenerationSettings.Quality)));
+            _meshOptimization.Add(Field(settings, nameof(GenerationSettings.ShapeFidelity)));
+            _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MaxTriangles)));
+            _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MinIslandSize)));
 
             var filters = Foldout(this, Strings.SectionFilters, "AutoCollider.Generate.Filters");
             filters.Add(Field(settings, nameof(GenerationSettings.IncludeChildren)));
@@ -110,6 +127,9 @@ namespace AutoCollider.Editor
             _resultLabel = new Label();
             _resultLabel.AddToClassList("ac-result__summary");
             _resultBox.Add(_resultLabel);
+            _resultStats = new Label();
+            _resultStats.AddToClassList("ac-result__line");
+            _resultBox.Add(_resultStats);
             _resultDetails = new Foldout { text = Strings.ResultDetails, value = false };
             _resultBox.Add(_resultDetails);
             actions.Add(_resultBox);
@@ -164,6 +184,7 @@ namespace AutoCollider.Editor
             _removeButton.SetEnabled(removable > 0);
 
             _strategyHint.text = Strings.StrategyHint(Settings.Strategy);
+            _presetRow.Refresh();
             SchedulePreview();
         }
 
@@ -196,14 +217,24 @@ namespace AutoCollider.Editor
 
             var results = new List<TargetResult>();
             var shapes = 0;
+            var stats = new ColliderStats();
             foreach (var target in _targets)
             {
                 var result = GenerationPipeline.Compute(target, Settings);
                 results.Add(result);
                 shapes += result.Shapes.Count;
+                if (result.HasMeshStats) stats.Add(result.Stats);
             }
             PreviewDrawer.Show(results);
-            _previewHint.text = string.Format(Strings.PreviewSummary, shapes);
+            var statsText = GenerateCommands.DescribeStats(stats);
+            _previewHint.text = string.Format(Strings.PreviewSummary, shapes)
+                                + (statsText.Length > 0 ? "\n" + statsText : string.Empty);
+        }
+
+        private void OnPresetApplied()
+        {
+            _serialized.Update();
+            RefreshTargets();
         }
 
         private void Generate()
@@ -235,6 +266,8 @@ namespace AutoCollider.Editor
 
             _resultBox.RemoveFromClassList("ac-hidden");
             _resultLabel.text = summary ?? GenerateCommands.Describe(report);
+            _resultStats.text = GenerateCommands.DescribeStats(report.Stats);
+            _resultStats.EnableInClassList("ac-hidden", _resultStats.text.Length == 0);
             _resultDetails.Clear();
             foreach (var result in report.Results)
             {
@@ -335,39 +368,5 @@ namespace AutoCollider.Editor
             for (var i = 0; i < mesh.subMeshCount; i++) indices += mesh.GetIndexCount(i);
             return (int)(indices / 3);
         }
-
-        private static VisualElement Section(VisualElement parent, string title)
-        {
-            var section = new VisualElement();
-            section.AddToClassList("ac-section");
-            if (title != null)
-            {
-                var label = new Label(title);
-                label.AddToClassList("ac-section__header");
-                section.Add(label);
-            }
-            parent.Add(section);
-            return section;
-        }
-
-        private static Foldout Foldout(VisualElement parent, string title, string viewDataKey)
-        {
-            var foldout = new Foldout { text = title, value = false, viewDataKey = viewDataKey };
-            foldout.AddToClassList("ac-section");
-            foldout.AddToClassList("ac-foldout");
-            parent.Add(foldout);
-            return foldout;
-        }
-
-        private static VisualElement Row(VisualElement parent)
-        {
-            var row = new VisualElement();
-            row.AddToClassList("ac-row");
-            parent.Add(row);
-            return row;
-        }
-
-        private static PropertyField Field(SerializedProperty settings, string name) =>
-            new(settings.FindPropertyRelative(name));
     }
 }

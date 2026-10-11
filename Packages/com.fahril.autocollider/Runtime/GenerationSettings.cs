@@ -44,6 +44,25 @@ namespace AutoCollider
         [Tooltip("Physics material assigned to generated colliders (optional).")]
         public PhysicsMaterial Material;
 
+        [Tooltip("Mesh simplification amount. 1 = keep almost all detail, 0 = simplify as much as possible.")]
+        [Range(0f, 1f)]
+        public float Quality = 0.5f;
+
+        [Tooltip("How closely the simplified surface follows the original (keeps corners and edges). Higher = more accurate, same triangle count.")]
+        [Range(0f, 1f)]
+        public float ShapeFidelity = 0.6f;
+
+        [Tooltip("Upper limit for triangles per optimized mesh collider (0 = no limit). Simplification increases until it fits.")]
+        [Min(0)]
+        public int MaxTriangles;
+
+        [Tooltip("Grow (+) or shrink (−) colliders along their surface, in meters. Fixes small penetration or clearance issues.")]
+        public float Inflate;
+
+        [Tooltip("Drop small disconnected mesh pieces (bolts, decals) smaller than this fraction of the object size before optimizing (0 = keep all).")]
+        [Range(0f, 0.5f)]
+        public float MinIslandSize;
+
         /// <summary>Deep copy (the material reference is shared).</summary>
         public GenerationSettings Clone() => (GenerationSettings)MemberwiseClone();
     }

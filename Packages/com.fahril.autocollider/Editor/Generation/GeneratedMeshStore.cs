@@ -23,23 +23,34 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>Find a stored mesh with identical content, or create and store a new one.</summary>
-        public Mesh GetOrCreate(string libraryName, string meshName, Vector3[] vertices, int[] triangles)
+        /// <param name="source">Original mesh this one was optimized from (enables Restore Original).</param>
+        public Mesh GetOrCreate(string libraryName, string meshName, Vector3[] vertices, int[] triangles, Mesh source = null)
         {
             var hash = ContentHash(vertices, triangles);
             var library = GetLibrary(libraryName);
             if (library.TryGet(hash, out var existing)) return existing;
 
             var mesh = new Mesh { name = $"{meshName}_{hash.Substring(0, 8)}" };
+            if (vertices.Length > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.SetVertices(vertices);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
             AssetDatabase.AddObjectToAsset(mesh, library);
-            library.Add(hash, mesh);
+            library.Add(hash, mesh, source);
             EditorUtility.SetDirty(library);
             _dirty.Add(library);
             return mesh;
+        }
+
+        /// <summary>The original mesh behind a stored optimized mesh, if any.</summary>
+        public static bool TryGetSource(Mesh mesh, out Mesh source)
+        {
+            source = null;
+            if (mesh == null) return false;
+            var library = AssetDatabase.LoadAssetAtPath<GeneratedMeshLibrary>(AssetDatabase.GetAssetPath(mesh));
+            return library != null && library.TryGetSource(mesh, out source);
         }
 
         /// <summary>Write pending changes to disk. Call once at the end of a batch.</summary>

@@ -6,7 +6,8 @@ namespace AutoCollider.Editor
 {
     /// <summary>
     /// Main object of a generated-mesh asset. Collider meshes are stored as its sub-assets, indexed by content hash
-    /// so identical meshes (e.g. many prefab instances) are saved once.
+    /// so identical meshes (e.g. many prefab instances) are saved once. Optimized meshes remember their source mesh,
+    /// so re-optimizing always starts from the original and "Restore Original" is possible.
     /// </summary>
     internal sealed class GeneratedMeshLibrary : ScriptableObject
     {
@@ -15,6 +16,7 @@ namespace AutoCollider.Editor
         {
             public string Hash;
             public Mesh Mesh;
+            public Mesh Source;
         }
 
         [SerializeField] private List<Item> _items = new();
@@ -35,10 +37,25 @@ namespace AutoCollider.Editor
             return false;
         }
 
-        public void Add(string hash, Mesh mesh)
+        /// <summary>The original mesh an optimized mesh was made from (null for meshes generated from renderers).</summary>
+        public bool TryGetSource(Mesh mesh, out Mesh source)
+        {
+            foreach (var item in _items)
+            {
+                if (item.Mesh == mesh && item.Source != null)
+                {
+                    source = item.Source;
+                    return true;
+                }
+            }
+            source = null;
+            return false;
+        }
+
+        public void Add(string hash, Mesh mesh, Mesh source = null)
         {
             _items.RemoveAll(i => i.Hash == hash || i.Mesh == null);
-            _items.Add(new Item { Hash = hash, Mesh = mesh });
+            _items.Add(new Item { Hash = hash, Mesh = mesh, Source = source });
         }
     }
 }

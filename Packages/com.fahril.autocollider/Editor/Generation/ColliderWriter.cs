@@ -90,7 +90,7 @@ namespace AutoCollider.Editor
             var center = space.ToLocalPoint(shape.Center);
             var uniformScale = math.abs(space.Scale.x);
 
-            if (shape.Kind != ShapeKind.ConvexMesh && shape.IsRotated)
+            if (!shape.IsMesh && shape.IsRotated)
             {
                 host = CreateChild(container, shape.Label);
                 host.transform.localPosition = center;
@@ -128,15 +128,16 @@ namespace AutoCollider.Editor
                     return capsule;
                 }
                 case ShapeKind.ConvexMesh:
+                case ShapeKind.ConcaveMesh:
                 {
-                    var hull = shape.Hull;
-                    var vertices = new Vector3[hull.Vertices.Length];
-                    for (var v = 0; v < vertices.Length; v++) vertices[v] = space.ToLocalPoint(hull.Vertices[v]);
-                    var mesh = _meshStore.GetOrCreate(libraryName, shape.Label, vertices, hull.Triangles);
+                    var source = shape.MeshVertices;
+                    var vertices = new Vector3[source.Length];
+                    for (var v = 0; v < vertices.Length; v++) vertices[v] = space.ToLocalPoint(source[v]);
+                    var mesh = _meshStore.GetOrCreate(libraryName, shape.Label, vertices, shape.MeshTriangles);
 
                     var meshCollider = Undo.AddComponent<MeshCollider>(host);
                     meshCollider.sharedMesh = mesh;
-                    meshCollider.convex = true;
+                    meshCollider.convex = shape.Kind == ShapeKind.ConvexMesh;
                     return meshCollider;
                 }
                 default:
