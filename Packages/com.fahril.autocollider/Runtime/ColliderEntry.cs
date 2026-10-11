@@ -22,7 +22,11 @@ namespace AutoCollider
         }
 
         /// <summary>The tracked collider. Null if it was deleted outside the tool.</summary>
-        public Collider Collider => _collider;
+        public Collider Collider
+        {
+            get => _collider;
+            internal set => _collider = value;
+        }
 
         /// <summary>Display name, e.g. "Seat" or "Hull 3".</summary>
         public string Label

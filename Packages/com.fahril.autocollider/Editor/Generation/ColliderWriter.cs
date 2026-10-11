@@ -29,7 +29,6 @@ namespace AutoCollider.Editor
 
             var group = target.GetComponent<ColliderGroup>();
             if (group == null) group = Undo.AddComponent<ColliderGroup>(target);
-            Undo.RecordObject(group, Strings.UndoGenerate);
 
             result.CollidersRemoved += settings.Replace switch
             {
@@ -37,6 +36,7 @@ namespace AutoCollider.Editor
                 ReplaceMode.ReplaceAll => RemoveAllExceptLocked(group),
                 _ => 0,
             };
+            RecordGroup(group, Strings.UndoGenerate);
             group.RemoveMissing();
 
             var container = EnsureContainer(group);
@@ -51,22 +51,48 @@ namespace AutoCollider.Editor
 
                 if (!(collider is MeshCollider { convex: false })) collider.isTrigger = settings.IsTrigger;
                 collider.sharedMaterial = settings.Material;
+                RecordGroup(group, Strings.UndoGenerate);
                 group.AddEntry(new ColliderEntry(collider, shape.Label, i, generated: true));
                 result.CollidersCreated++;
             }
 
+            RecordGroup(group, Strings.UndoGenerate);
             group.Recipe.Settings = settings.Clone();
             EditorUtility.SetDirty(group);
             if (PrefabUtility.IsPartOfPrefabInstance(group))
                 PrefabUtility.RecordPrefabInstancePropertyModifications(group);
         }
 
+        /// <summary>
+        /// Create one collider for <paramref name="shape"/> in <paramref name="group"/> and register it (used by the edit tool).
+        /// Settings such as trigger / material are copied from <paramref name="template"/> when given.
+        /// </summary>
+        public ColliderEntry AddShape(ColliderGroup group, FittedShape shape, in TargetSpace space, Collider template = null)
+        {
+            var container = EnsureContainer(group);
+            var collider = CreateCollider(shape, container, space, group.name);
+            if (collider == null) return null;
+
+            if (template != null)
+            {
+                collider.enabled = template.enabled;
+                if (!(collider is MeshCollider { convex: false })) collider.isTrigger = template.isTrigger;
+                collider.sharedMaterial = template.sharedMaterial;
+            }
+
+            var entry = new ColliderEntry(collider, shape.Label, -1, generated: true);
+            RecordGroup(group, Strings.UndoEditCollider);
+            group.AddEntry(entry);
+            EditorUtility.SetDirty(group);
+            return entry;
+        }
+
         /// <summary>Remove generated, unlocked colliders. Removes the container and the group when nothing is left.</summary>
         public static int RemoveGenerated(ColliderGroup group)
         {
             if (group == null) return 0;
-            Undo.RecordObject(group, Strings.UndoRemove);
             var removed = RemoveEntries(group, e => e.Generated && !e.Locked);
+            RecordGroup(group, Strings.UndoRemove);
             group.RemoveMissing();
 
             if (group.Entries.Count == 0)
@@ -83,7 +109,7 @@ namespace AutoCollider.Editor
             return removed;
         }
 
-        private Collider CreateCollider(FittedShape shape, Transform container, in TargetSpace space, string libraryName)
+        internal Collider CreateCollider(FittedShape shape, Transform container, in TargetSpace space, string libraryName)
         {
             // Rotation is only produced for uniformly scaled targets, so dividing by any scale component is exact.
             var host = container.gameObject;
@@ -145,7 +171,7 @@ namespace AutoCollider.Editor
             }
         }
 
-        private Transform EnsureContainer(ColliderGroup group)
+        internal Transform EnsureContainer(ColliderGroup group)
         {
             if (group.Container != null) return group.Container;
 
@@ -155,8 +181,19 @@ namespace AutoCollider.Editor
             go.layer = target.layer;
             GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(target));
             Undo.RegisterCreatedObjectUndo(go, Strings.UndoGenerate);
+            RecordGroup(group, Strings.UndoGenerate);
             group.Container = go.transform;
             return go.transform;
+        }
+
+        /// <summary>
+        /// Record the group right before changing it. Must come <b>after</b> any other Undo call (create / add / destroy):
+        /// those flush pending records, so a record taken earlier would capture "no change" and the edit would be lost.
+        /// </summary>
+        internal static void RecordGroup(ColliderGroup group, string undoName)
+        {
+            Undo.RecordObject(group, undoName);
+            EditorUtility.SetDirty(group);
         }
 
         private static GameObject CreateChild(Transform container, string name)
@@ -178,8 +215,10 @@ namespace AutoCollider.Editor
             var removed = 0;
             foreach (var entry in toRemove)
             {
-                if (DestroyCollider(entry.Collider, group.Container)) removed++;
+                // Change the group first (recorded), then destroy — the destroy would flush an earlier record.
+                RecordGroup(group, Strings.UndoRemove);
                 group.RemoveEntry(entry);
+                if (DestroyCollider(entry.Collider, group.Container)) removed++;
             }
             return removed;
         }
@@ -199,7 +238,7 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>Destroy a collider; also its GameObject when that is a dedicated child of the container.</summary>
-        private static bool DestroyCollider(Collider collider, Transform container)
+        internal static bool DestroyCollider(Collider collider, Transform container)
         {
             if (collider == null) return false;
             var go = collider.gameObject;
@@ -212,7 +251,7 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>True when the object holds only a Transform and has no children (safe to delete).</summary>
-        private static bool IsDisposableObject(GameObject go)
+        internal static bool IsDisposableObject(GameObject go)
         {
             return go.transform.childCount == 0 && go.GetComponents<Component>().Length == 1;
         }

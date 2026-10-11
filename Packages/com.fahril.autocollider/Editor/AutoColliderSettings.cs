@@ -60,6 +60,12 @@ namespace AutoCollider.Editor
         [Tooltip("Draw colliders through geometry (faded) while the collider tool is active.")]
         public bool XrayByDefault = true;
 
+        [Tooltip("Lock colliders you edit in the Scene view, so Regenerate keeps your changes.")]
+        public bool LockAfterEdit = true;
+
+        [Tooltip("Show collider names in the Scene view while the collider tool is active.")]
+        public bool ShowLabels;
+
         [Tooltip("Opacity of the filled collider surfaces drawn in the Scene view.")]
         [Range(0f, 1f)]
         public float FillOpacity = 0.15f;

@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M3 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M4 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -289,21 +289,25 @@ public class ColliderGroup : MonoBehaviour {
 
 ### 5.5 Scene editing (criterion 4)
 
-**`ColliderEditTool : EditorTool`** (shows in the Tools overlay; activates for objects with `ColliderGroup` or any Collider). Paired **`ColliderOverlay`** (UI Toolkit Overlay) with 3 modes:
+*Implemented in M4 (Paint mode: M5).*
+
+**`ColliderEditTool : EditorTool`** — a component tool for `ColliderGroup` (in the Tools overlay when a group is selected; "Edit in Scene" in the inspector and the window's Edit tab activate it). Its targets are the selected groups, so the tool never changes Unity's `Selection`; collider selection lives in **`ColliderEditState`** (editor-only: selection, mode, handle mode, hide / solo, X-ray, labels). Paired **`ColliderOverlay`** (transient UI Toolkit overlay, visible only while the tool is active).
 
 | Mode | What you do |
 |---|---|
-| **Select** | Click colliders in the viewport (ray vs shape math, cycles through overlaps on repeated click), box-select, Shift/Ctrl add/remove. Hover highlight. |
-| **Edit** | Handles on selected collider(s): face handles resize (Alt = symmetric, Ctrl = snap), radius/height handles for sphere/capsule, move/rotate gizmo per collider, **V = snap to mesh vertex**. Multi-edit when several selected. |
-| **Paint** | Brush/box-select triangles (or vertices) on the source mesh → "Create Box / Rotated Box / Sphere / Capsule / Hull from selection" or "Auto-decompose selection". Selection saved as a `PaintedRegion` in the recipe. |
+| **Select** (1) | Click colliders (exact `Collider.Raycast` per candidate; repeat-click cycles through overlaps), drag a rectangle to box-select (projected bounds centers), Shift add / Ctrl toggle, click empty to clear. A default control keeps clicks from reaching Unity's object picking. |
+| **Edit** (2) | Same picking + handles on the active collider: **Resize** (R) — Unity bounds handles drawn in the shape's own frame (face drag, Alt symmetric, Ctrl snap; sphere radius; capsule radius + height); **Move** (W) / **Rotate** (E) — position / rotation handles. Hold **V** to snap the dragged face (or the moved center) to the source-mesh vertex under the mouse. |
+| **Paint** (M5) | Brush/box-select triangles on the source mesh → create collider from selection; saved as `PaintedRegion`s in the recipe. |
 
-**Operations** (overlay buttons + shortcuts + context menu): Duplicate, Delete, Mirror X/Y/Z (object-local), Merge selected → hull or box, Convert type (box ↔ capsule ↔ sphere ↔ hull, refit), Refit to vertices inside, Inflate/Deflate selected, Lock/Unlock, Solo/Hide, Rename.
+**Shapes ↔ colliders (`ColliderShapes`).** Every edit converts the live collider to a `FittedShape` in the group's world-sized frame (exact round trip incl. non-uniform scale), edits the shape, and writes it back with `ColliderOperations.Apply`: in place when the collider can express it (on the shared container when unrotated, or on its own child), otherwise rebuilt with the **same entry** re-pointed (e.g. rotating a box that lives on the container moves it onto its own child; mesh colliders `DetachToChild` — same mesh asset — before moving / rotating). Under non-uniform scale rotated primitives are refit axis-aligned (`EnsureRepresentable`) because a rotated child would shear.
 
-**Visuals:** per-type color, selected = highlight color, X-ray (draw through geometry, faded), filled + wire mode, label overlay (name/type). All colors/handle size configurable in Project Settings.
+**Operations (`ColliderOperations`, each exactly one Undo step):** Duplicate, Delete, Mirror X/Y/Z (plane through the group pivot; rotations S·R·S, meshes mirrored + re-wound, Left↔Right / _L↔_R names), Merge → convex / box, Convert → box / sphere / capsule / convex (fit around the current shape), Refit (shrink-wrap to the source vertices inside the collider + 10 %, same kind and orientation), Inflate / Deflate, Lock, Rename (+ dedicated child name). Editor-only: Hide, Solo, Show All. **Edited colliders are locked automatically** (Project Settings ▸ Lock After Edit) so Regenerate keeps hand edits.
 
-**Shortcuts** (`[Shortcut]`, rebindable, context = tool active): `1/2/3` mode, `V` vertex snap, `Ctrl+D` duplicate, `Del` delete, `M` mirror, `G` merge, `H` solo, `Esc` exit tool.
+**Undo discipline:** any Undo call (create / add / destroy) flushes pending `RecordObject`s, so the group is recorded **right before** each change (`ColliderWriter.RecordGroup`) and changed before the objects it referenced are destroyed.
 
-Every operation is Undo-able as one step.
+**Visuals (`ColliderDrawing`):** per-type color, selection color + stronger fill, translucent fill (pushed out 0.2 % against z-fighting), X-ray (faded lines through geometry), labels (🔒 when locked), disabled colliders dimmed; mesh collider edges cached per mesh.
+
+**Shortcuts:** an `IShortcutContext` registered while the tool is active (rebindable in Edit ▸ Shortcuts ▸ Auto Collider): `1/2` mode, `W/E/R` handles, `V` (hold) vertex snap, `Ctrl+D` duplicate, `Del` delete, `M` mirror X, `G` merge → convex, `L` lock, `H` solo, `Shift+H` hide, `Alt+H` show all, `X` X-ray; `Esc` clears the selection, then exits. Edit-menu commands (Duplicate, Delete, Frame Selected, Select All) act on colliders while the tool is active.
 
 ### 5.6 UI (criterion 1)
 
@@ -442,7 +446,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M1** Core generation ✅ | `MeshSource`, AABB/PCA-OBB/min-OBB, Ritter/Welzl, capsule fitter, `QuickHull3D` (255 cap), strategies BestPrimitive/Box/Sphere/Capsule/ConvexHull, pipeline, `ColliderWriter`, `GeneratedMeshStore`, `ColliderGroup` (entries + ownership), `BatchProcessor` (selection, single Undo), window Generate tab, basic inspector | Generate for 10 selected objects, one Ctrl+Z reverts all; fitter tests pass |
 | **M2** Optimization ✅ | `ClusterSimplifier` (Burst, QEM), `MeshCleaner`, `InflateDeflate`, `OptimizedMesh` strategy, stats, presets (4 built-in + save), Optimize tab, heatmap | Sample mesh tris −80% at Balanced with max error under threshold; deterministic |
 | **M3** Decomposition ✅ | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
-| **M4** Scene editing | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
+| **M4** Scene editing ✅ | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
 | **M5** Paint & skinned | Paint mode (brush/box triangle select), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
 | **M6** Runtime | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
 | **M7** Polish | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |

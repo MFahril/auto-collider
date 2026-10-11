@@ -19,7 +19,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M1 | Core generation | 1, 3, 5 | ✅ |
 | M2 | Optimization | 2 | ✅ |
 | M3 | Convex decomposition | 2 | ✅ |
-| M4 | Scene editing | 4 | ⬜ |
+| M4 | Scene editing | 4 | ✅ |
 | M5 | Paint & skinned | 4 | ⬜ |
 | M6 | Runtime bridge features | 5 | ⬜ |
 | M7 | Polish & release | 1 | ⬜ |
@@ -136,19 +136,22 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M4 — Scene editing ⬜
+## M4 — Scene editing ✅
 
-- [ ] `ColliderEditTool : EditorTool` + `ColliderOverlay` (Select / Edit / Paint modes)
-- [ ] `ColliderPicker` (ray vs shape, overlap cycling, box select)
-- [ ] `ShapeHandles` (face resize, Alt symmetric, Ctrl snap, radius/height, move/rotate)
-- [ ] Vertex snap (V)
-- [ ] Ops: duplicate, delete, mirror X/Y/Z, merge → hull/box, convert type, refit, inflate, lock, solo/hide, rename
-- [ ] Visuals: type colors, selection highlight, X-ray, fill + wire, labels
-- [ ] `[Shortcut]` bindings
-- [ ] Inspector list ↔ scene selection sync
-- [ ] Tests: each op is a single Undo step; mirror of rotated child correct
+- [x] `ColliderEditTool : EditorTool` (component tool for `ColliderGroup`, in the Tools overlay) + `ColliderOverlay` (transient UI Toolkit overlay): Select / Edit modes (Paint button present, enabled in M5)
+- [x] `ColliderPicker`: exact per-collider raycasts (any collider type, ignores layers), repeat-click cycles through overlaps, drag rectangle select; Shift add / Ctrl toggle; clicks never change Unity's selection
+- [x] Handles: Unity bounds handles in the shape's own frame (face resize, Alt symmetric, Ctrl snap) for box / sphere / capsule radius & height; Move / Rotate handles (W / E / R); rotating a box on the shared container moves it onto its own child; mesh colliders detach to a child (same mesh asset) to move / rotate
+- [x] Vertex snap (hold V): resize snaps the dragged face to the vertex under the mouse; move snaps the center
+- [x] `ColliderOperations` (one Undo step each): duplicate, delete, mirror X / Y / Z (rotated children too, mirrored meshes re-wound, Left↔Right names), merge → convex / box, convert → box / sphere / capsule / convex, refit (shrink-wrap to the source vertices inside), inflate / deflate, lock, rename; plus hide / solo / show all (editor-only)
+- [x] Edited colliders lock automatically (Project Settings ▸ Lock After Edit) so Regenerate keeps them
+- [x] `ColliderShapes`: live collider ↔ `FittedShape` in the group's world-sized frame (exact round trip, non-uniform scale aware); `EnsureRepresentable` refits rotated primitives axis-aligned under non-uniform scale
+- [x] Visuals (`ColliderDrawing`): type colors, selection color, translucent fill, X-ray (faded through geometry), labels (lock icon), disabled colliders dimmed
+- [x] Shortcuts via an `IShortcutContext` (only while the tool is active, rebindable): 1/2, W/E/R, Ctrl+D, Del, M, G, L, H / Shift+H / Alt+H, X, V; Edit-menu commands (Duplicate, Delete, Frame Selected, Select All) act on colliders
+- [x] Inspector ↔ scene sync: Edit in Scene button, row click selects (Shift / Ctrl), selected rows highlighted, Select button frames; window Edit tab (enter tool + shortcut sheet)
+- [x] **Fix (also M1 Regenerate):** `RecordObject` must come right before each group change — other Undo calls flush pending records, so entry edits were lost on undo. `ColliderWriter.RecordGroup` + ordering fixed everywhere; regenerate-undo test added
+- [x] Tests (20 new): shape round trips (non-uniform scale, rotated child), resize in place + auto-lock + undo, rotate → own child + undo, detach mesh, duplicate / delete, mirror rotated child (pose + every mirrored corner inside), merge, convert, refit, inflate, lock + rename, picker order + cycling, rect select, vertex snap, mirror names, selection / visibility state
 
-**Done when:** all ops Undo-able; edit a box face by drag; mirror works on rotated children.
+**Done when:** all ops Undo-able; edit a box face by drag; mirror works on rotated children. → *Verified 2026-10-12: 121/121 tests (face resize via the same `Apply` path the bounds handle uses). Live in the editor on the dev-scene table: tool activates from the inspector / window, overlay shows modes, handles, summary and actions; Mirror Z, Convert → convex, Merge → box all applied, edited colliders auto-locked, three Ctrl+Z restored the original exactly.*
 
 ---
 
@@ -202,6 +205,7 @@ Tests (84 EditMode, all green, ~5 s)
 - Burst port of `QuickHull3D` (managed today; dense input is thinned first) — would also speed up decomposition merges (~1.5 ms per 256-point hull)
 - Decomposition: split regions along the best cutting plane (better corners than fixed initial blocks)
 - Error heatmap in the Generate tab live preview (Optimize tab has it)
+- Edit tool: per-face drag preview of the error heatmap; multi-collider handles (edit several at once)
 - Lower minimum Unity version (currently 6000.6 because of built-in Burst 2.0 / Collections 6.6 versions)
 
 ---
@@ -215,3 +219,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M1 ✅ | Fitters, QuickHull, pipeline, writer, ColliderGroup, batch + single Undo, window Generate tab, inspector, 60 tests green; package 0.2.0 |
 | 2026-10-12 | M2 ✅ | Burst QEM simplifier, cleaner, inflate, error metric + heatmap, Optimized Mesh strategy, Optimize tab (apply / restore), presets, 84 tests green; package 0.3.0 |
 | 2026-10-12 | M3 ✅ | Burst voxelizer, convex decomposition with greedy concavity merge, primitive replacement, Auto strategy (default), 100 tests green; package 0.4.0 |
+| 2026-10-12 | M4 ✅ | Collider edit tool + overlay, picking, handles, vertex snap, 10 operations (one Undo each), shortcuts, inspector sync; fixed Undo record ordering; 121 tests green; package 0.5.0 |

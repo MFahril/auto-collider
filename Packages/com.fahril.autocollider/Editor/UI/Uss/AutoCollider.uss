@@ -351,3 +351,65 @@
 .ac-heatmap-threshold > Label {
     min-width: 70px;
 }
+
+/* ---------- Collider tool overlay & edit tab ---------- */
+
+.ac-overlay {
+    min-width: 230px;
+    max-width: 280px;
+    padding: var(--ac-spacing-s);
+}
+
+.ac-overlay__row {
+    flex-wrap: wrap;
+    margin-bottom: var(--ac-spacing-xs);
+}
+
+.ac-overlay__row > .ac-button {
+    margin: 1px;
+}
+
+.ac-overlay__toggle--on {
+    background-color: var(--ac-accent);
+    color: #ffffff;
+}
+
+.ac-overlay__summary {
+    -unity-font-style: bold;
+    margin: var(--ac-spacing-s) var(--ac-spacing-xs) 0 var(--ac-spacing-xs);
+}
+
+.ac-overlay__caption {
+    min-width: 52px;
+    color: var(--ac-subtle-text);
+    font-size: 11px;
+    -unity-text-align: middle-left;
+}
+
+.ac-overlay__rename {
+    margin: var(--ac-spacing-xs) 1px;
+}
+
+.ac-overlay__step {
+    width: 48px;
+    margin: 1px;
+}
+
+.ac-entry-row--selected {
+    background-color: var(--ac-accent-muted);
+}
+
+.ac-shortcuts {
+    white-space: normal;
+    font-size: 11px;
+    -unity-font-style: normal;
+}
+
+.ac-overlay .unity-base-field__label {
+    min-width: 0;
+    padding-right: var(--ac-spacing-s);
+}
+
+.ac-overlay Toggle {
+    margin: 1px var(--ac-spacing-s) 1px var(--ac-spacing-xs);
+}

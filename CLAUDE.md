@@ -45,7 +45,9 @@ Packages/com.fahril.autocollider/
     Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer,
                                Voxelizer (Burst), ConvexDecomposer, PrimitiveReplacer, stats
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store
-    Editing/                   EditorTool, handles, picking, overlay, paint, operations
+    Editing/                   ColliderEditTool (EditorTool), ColliderOverlay, ColliderOperations (one Undo step each),
+                               ColliderShapes (collider ↔ shape), ColliderPicker, ColliderEditState, ColliderDrawing,
+                               VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
     Doctor/                    scene validator
   Tests/Editor/                EditMode tests
@@ -71,6 +73,8 @@ Assets/Sample Model/           (empty) place real test models here
 4. **Every** scene/asset mutation goes through Undo:
    `Undo.RegisterCreatedObjectUndo`, `Undo.AddComponent`, `Undo.RecordObject`, `Undo.DestroyObjectImmediate`, `Undo.SetTransformParent`.
    One user action = **one Undo group** (`Undo.IncrementCurrentGroup` + `Undo.SetCurrentGroupName` + `Undo.CollapseUndoOperations`). Batch over 100 objects is still one Ctrl+Z.
+   **Record right before you modify.** Any other Undo call (`AddComponent`, `RegisterCreatedObjectUndo`, `DestroyObjectImmediate`) flushes pending `RecordObject`s — a record taken *before* such a call captures "no change" and the later edit is silently lost on undo. Use `ColliderWriter.RecordGroup(group, …)` immediately before every `ColliderGroup` change, and change the group *before* destroying what it referenced.
+   Tests that check undo must assert the restored state (entries, references) — after undoing a destroy, compare objects with Unity `==` (the C# wrapper is new), not `Is.SameAs`.
 5. **Only delete colliders we own** (registered in `ColliderGroup` with `generated == true`). Never wipe user-authored colliders unless the user explicitly picks "Replace existing colliders".
 6. Never silently change a user's **tag, layer, static flags, or transform**. Layer/tag assignment is opt-in and applies to generated collider objects only.
 7. Prefabs: modify instances with `PrefabUtility.RecordPrefabInstancePropertyModifications`; modify prefab assets with `PrefabUtility.LoadPrefabContents` → edit → `SaveAsPrefabAsset` → `UnloadPrefabContents`. Never edit a prefab asset through a scene instance by accident.
@@ -150,6 +154,8 @@ Use this when designing fitters, writers, and validators.
 - Namespace gotcha: inside `namespace AutoCollider.Editor`, the bare name `Editor` resolves to our namespace — write `UnityEditor.Editor` for custom inspectors.
 - Unity 6.6 gotchas: `Object.GetInstanceID()` is obsolete-as-error → use `GetEntityId()`; pick icons with `AssetPreview.GetMiniTypeThumbnail(type)` (no "missing icon" console warnings, unlike `EditorGUIUtility.IconContent`).
 - Hierarchy (`GameObject/…`) context menu items run once **per selected object** — guard with the "first invocation only" check (see `GenerateCommands`).
+- Component `EditorTool`s are found through the inspector's active editors, which can lag a selection change: `ToolManager.SetActiveTool` may throw — rebuild `ActiveEditorTracker.sharedTracker` and retry (see `ColliderToolCommands.ActivateTool`). Overlays default to hidden: use `defaultDisplay = true` and/or set `displayed`.
+- Tool-only shortcuts use an `IShortcutContext` registered in `OnActivated` (they override global keys like Ctrl+D / Delete only while the tool is active). Never change Unity's `Selection` from inside the tool — the tool's targets are the selected groups.
 - Editor-only internals are `internal`; tests reach them via `InternalsVisibleTo` (see each assembly's `AssemblyInfo.cs`).
 
 ---

@@ -58,9 +58,8 @@ namespace AutoCollider.Editor
             _removeButton = new Button(RemoveGenerated) { tooltip = Strings.RemoveTooltip };
             _removeButton.AddToClassList("ac-button");
             actions.Add(_removeButton);
-            var editInScene = new Button { text = Strings.EditInScene, tooltip = Strings.EditInSceneTooltip };
+            var editInScene = new Button(ColliderToolCommands.ActivateTool) { text = Strings.EditInScene, tooltip = Strings.EditInSceneTooltip };
             editInScene.AddToClassList("ac-button");
-            editInScene.SetEnabled(false);
             actions.Add(editInScene);
             var openWindow = new Button(AutoColliderWindow.Open) { text = Strings.OpenWindow, tooltip = Strings.OpenWindowTooltip };
             openWindow.AddToClassList("ac-button");
@@ -117,11 +116,26 @@ namespace AutoCollider.Editor
             recipe.Add(recipeField);
             root.Add(recipe);
 
-            root.RegisterCallback<AttachToPanelEvent>(_ => Undo.undoRedoPerformed += Refresh);
-            root.RegisterCallback<DetachFromPanelEvent>(_ => Undo.undoRedoPerformed -= Refresh);
+            root.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                Undo.undoRedoPerformed += Refresh;
+                ColliderEditState.Changed += RefreshSelection;
+            });
+            root.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                Undo.undoRedoPerformed -= Refresh;
+                ColliderEditState.Changed -= RefreshSelection;
+            });
             root.schedule.Execute(RefreshIfChanged).Every(500);
             Refresh();
             return root;
+        }
+
+        /// <summary>Scene-tool selection changed: re-bind rows (highlight) and pick up rebuilt colliders.</summary>
+        private void RefreshSelection()
+        {
+            if (target == null || _list == null) return;
+            Refresh();
         }
 
         private void RefreshIfChanged()
@@ -178,6 +192,13 @@ namespace AutoCollider.Editor
             row.Add(icon);
             var label = new Label { name = "label" };
             label.AddToClassList("ac-entry-row__label");
+            label.RegisterCallback<ClickEvent>(e =>
+            {
+                if (!(row.userData is ColliderEntry entry) || entry.Collider == null) return;
+                var op = e.shiftKey ? SelectOp.Add : e.actionKey ? SelectOp.Toggle : SelectOp.Replace;
+                ColliderEditState.Select(entry.Collider, op);
+                ColliderToolCommands.ActivateTool();
+            });
             row.Add(label);
             var kind = new Label { name = "kind" };
             kind.AddToClassList("ac-chip");
@@ -193,11 +214,11 @@ namespace AutoCollider.Editor
             select.AddToClassList("ac-entry-row__select");
             select.clicked += () =>
             {
-                if (row.userData is ColliderEntry entry && entry.Collider != null)
-                {
-                    Selection.activeObject = entry.Collider.gameObject;
-                    EditorGUIUtility.PingObject(entry.Collider);
-                }
+                if (!(row.userData is ColliderEntry entry) || entry.Collider == null) return;
+                // Keep the group selected (the tool needs it) and select the collider inside the tool instead.
+                ColliderEditState.Select(entry.Collider);
+                ColliderToolCommands.ActivateTool();
+                ColliderToolCommands.FrameSelection(SceneView.lastActiveSceneView);
             };
             row.Add(select);
             return row;
@@ -216,6 +237,7 @@ namespace AutoCollider.Editor
             var entry = _rows[index];
             var collider = entry.Collider;
             row.userData = entry;
+            row.EnableInClassList("ac-entry-row--selected", ColliderEditState.IsSelected(collider));
 
             row.Q<Image>("icon").image = AssetPreview.GetMiniTypeThumbnail(collider.GetType());
             var label = row.Q<Label>("label");

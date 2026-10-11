@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> Status: 0.4.0 — milestones M1 (generation), M2 (optimization) and M3 (convex decomposition + Auto) done. In-scene editing is next.
+> Status: 0.5.0 — milestones M1 (generation), M2 (optimization), M3 (convex decomposition + Auto) and M4 (scene editing) done. Painting colliders and skinned meshes are next.
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -29,6 +29,14 @@ Unity editor tool to **generate, optimize and edit colliders** for one or many o
 | Convex Hull | Convex mesh ≤ 255 triangles (works with moving Rigidbodies) |
 | Optimized Mesh | Simplified copy of the mesh, keeps holes and concave shapes (static / kinematic objects) |
 | Convex Decomposition | Several convex parts (boxes / spheres / capsules where they fit) — concave shapes on moving Rigidbodies |
+
+## Editing colliders in the Scene view
+Select an object with a **Collider Group** and click **Edit in Scene** (or pick the tool in the Tools overlay). Click colliders to select them (click again to cycle through overlaps, drag to box-select), then:
+- **Resize** (R) with the face handles — Alt = symmetric, hold **V** to snap a face to a mesh vertex.
+- **Move** (W) / **Rotate** (E).
+- **Duplicate** (Ctrl+D), **Delete** (Del), **Mirror** X / Y / Z (M), **Merge** into a convex hull or box (G), **Convert** to another shape, **Refit** (shrink-wrap to the mesh), **Inflate / Deflate**, **Lock** (L), **Solo** (H), **X-ray** (X).
+
+Every operation is one Ctrl+Z. Colliders you edit are locked so *Regenerate* keeps them.
 
 ## Optimizing existing mesh colliders
 **Window ▸ Optimize tab:** select objects (or choose *Whole Scene*), click **Analyze** to see triangles before → after, savings, accuracy and memory, turn on the **Error Heatmap** to see where the collider deviates, then **Optimize**. Optimized meshes are saved as assets and remember their original — **Restore Originals** puts it back.

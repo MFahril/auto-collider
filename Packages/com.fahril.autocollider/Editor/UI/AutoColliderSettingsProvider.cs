@@ -61,6 +61,8 @@ namespace AutoCollider.Editor
             var sceneView = Section(page, Strings.SectionSceneView);
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.HandleSize)));
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.XrayByDefault)));
+            sceneView.Add(Field(data, nameof(AutoColliderSettingsData.LockAfterEdit)));
+            sceneView.Add(Field(data, nameof(AutoColliderSettingsData.ShowLabels)));
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.FillOpacity)));
 
             var colors = Section(page, Strings.SectionColors);

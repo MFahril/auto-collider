@@ -99,6 +99,23 @@ namespace AutoCollider.Editor.Tests
         }
 
         [Test]
+        public void Regenerate_OnExistingGroup_OneUndoRestoresPreviousColliders()
+        {
+            var cube = Primitive(PrimitiveType.Cube, "Cube", Vector3.zero);
+            BatchProcessor.Generate(new[] { cube }, Settings(), MeshFolder, false);
+            var group = cube.GetComponent<ColliderGroup>();
+            var box = group.Entries.Single().Collider;
+
+            BatchProcessor.Generate(new[] { cube }, Settings(ColliderStrategy.Sphere), MeshFolder, false);
+            Assert.That(group.Entries.Single().Collider, Is.TypeOf<SphereCollider>());
+
+            Undo.PerformUndo();
+            Assert.That(group.Entries.Count, Is.EqualTo(1), "Entry list restored");
+            // Undo of a destroy restores the same object under a new C# wrapper: compare with Unity's ==.
+            Assert.That(group.Entries[0].Collider == box, "The previous box is back and tracked");
+        }
+
+        [Test]
         public void ReplaceAll_RemovesUserCollidersToo()
         {
             var cube = Primitive(PrimitiveType.Cube, "Cube", Vector3.zero);

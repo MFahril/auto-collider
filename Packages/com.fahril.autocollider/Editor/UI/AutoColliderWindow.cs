@@ -31,7 +31,7 @@ namespace AutoCollider.Editor
 
             tabs.Add(MakeTab(Strings.TabGenerate, new GenerateTab()));
             tabs.Add(MakeTab(Strings.TabOptimize, new OptimizeTab()));
-            tabs.Add(MakeTab(Strings.TabEdit, Placeholder(Strings.ComingEdit)));
+            tabs.Add(MakeTab(Strings.TabEdit, new EditTab()));
             tabs.Add(MakeTab(Strings.TabDoctor, Placeholder(Strings.ComingDoctor)));
         }
 

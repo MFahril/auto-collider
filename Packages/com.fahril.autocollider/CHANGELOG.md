@@ -3,6 +3,22 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-10-12
+
+### Added
+- **Collider edit tool** (M4) — Scene-view tool for Collider Groups (Tools overlay, *Edit in Scene* in the inspector, window *Edit* tab):
+  - Click to select (click again to cycle through overlapping colliders), drag to box-select, Shift add / Ctrl toggle.
+  - Resize with face handles (Alt symmetric, Ctrl snap), sphere radius, capsule radius / height; Move and Rotate handles; hold **V** to snap to mesh vertices.
+  - Operations, each one Undo step: Duplicate, Delete, Mirror X / Y / Z (swaps Left/Right names), Merge → convex / box, Convert → box / sphere / capsule / convex, Refit (shrink-wrap), Inflate / Deflate, Lock, Rename; Hide / Solo / Show All.
+  - Overlay panel with modes, handles, selection summary and all actions; X-ray and labels.
+  - Rebindable shortcuts that apply only while the tool is active (1/2, W/E/R, Ctrl+D, Del, M, G, L, H, X, V); Edit-menu Duplicate / Delete / Frame / Select All act on colliders.
+  - Edited colliders are locked automatically so Regenerate keeps your changes (Project Settings ▸ Lock After Edit).
+- Collider Group inspector ↔ scene sync: clicking a row selects the collider in the tool; selected rows are highlighted.
+- Project Settings: Lock After Edit, Show Labels.
+
+### Fixed
+- Undo after regenerating an existing Collider Group now restores the previous colliders and entry list (Undo records were taken too early).
+
 ## [0.4.0] - 2026-10-12
 
 ### Added
