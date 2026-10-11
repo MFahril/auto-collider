@@ -7,6 +7,8 @@ namespace AutoCollider.Editor
         public int SourceTriangles;
         public int ResultVertices;
         public int ResultTriangles;
+        /// <summary>Number of collider parts (convex decomposition); 0 or 1 for single shapes.</summary>
+        public int ResultParts;
         public float MaxError;
         public float MeanError;
         public double Milliseconds;
@@ -26,6 +28,7 @@ namespace AutoCollider.Editor
             SourceTriangles += other.SourceTriangles;
             ResultVertices += other.ResultVertices;
             ResultTriangles += other.ResultTriangles;
+            ResultParts += other.ResultParts;
             if (other.MaxError > MaxError) MaxError = other.MaxError;
             MeanError = MeanError == 0f ? other.MeanError : (MeanError + other.MeanError) * 0.5f;
             Milliseconds += other.Milliseconds;

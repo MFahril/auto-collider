@@ -80,8 +80,9 @@ namespace AutoCollider.Editor
         public static string DescribeStats(ColliderStats stats)
         {
             if (stats.SourceTriangles <= 0) return string.Empty;
-            return string.Format(Strings.StatsLine, stats.SourceTriangles, stats.ResultTriangles, stats.Savings * 100f,
+            var line = string.Format(Strings.StatsLine, stats.SourceTriangles, stats.ResultTriangles, stats.Savings * 100f,
                 Format.Distance(stats.MaxError));
+            return stats.ResultParts > 1 ? line + string.Format(Strings.StatsParts, stats.ResultParts) : line;
         }
 
         private static void Notify(string message)

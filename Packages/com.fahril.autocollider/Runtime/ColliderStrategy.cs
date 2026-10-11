@@ -15,5 +15,9 @@ namespace AutoCollider
         ConvexHull = 4,
         /// <summary>Simplified (concave) MeshCollider — static or kinematic objects only.</summary>
         OptimizedMesh = 5,
+        /// <summary>Several convex parts (hulls, or primitives where they fit) — concave shapes on moving Rigidbodies.</summary>
+        ConvexDecomposition = 6,
+        /// <summary>Picks the cheapest strategy that fits each mesh (primitive → hull → decomposition / optimized mesh).</summary>
+        Auto = 7,
     }
 }

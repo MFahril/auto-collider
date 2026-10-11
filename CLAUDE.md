@@ -42,7 +42,8 @@ Packages/com.fahril.autocollider/
     PackagePaths.cs            every hard-coded asset path (package root, USS, settings asset)
     AutoColliderSettings.cs    project settings singleton + AutoColliderSettingsData
     Core/                      MeshSource, MeshGeometry, TargetSpace, Fitting/ (box/sphere/capsule), QuickHull3D (pure math)
-    Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer, stats
+    Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer,
+                               Voxelizer (Burst), ConvexDecomposer, PrimitiveReplacer, stats
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store
     Editing/                   EditorTool, handles, picking, overlay, paint, operations
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
@@ -159,7 +160,7 @@ Use this when designing fitters, writers, and validators.
 2. After code changes, verify through **Unity-MCP**:
    - `refresh_unity` (compile) → `read_console` → **zero errors, zero new warnings** (the MCP bridge's own "WebSocket" reconnect warnings during domain reload are not ours).
    - `run_tests` (EditMode, assembly `AutoCollider.Editor.Tests`) → all green.
-   - For UI/scene features, exercise them in `Assets/AutoCollider Dev/M1 Test Scene.unity` (primitive props: table, tilted chair, squashed / scaled objects; dense `Rock` mesh with and without a MeshCollider for optimization) via `execute_code` / `manage_scene`, and screenshot with `manage_camera` (`capture_source: scene_view`). Leave the scene clean (no generated colliders, original meshes on colliders), delete generated test meshes (`Assets/AutoCollider/`), and reopen the user's scene afterwards.
+   - For UI/scene features, exercise them in `Assets/AutoCollider Dev/M1 Test Scene.unity` (primitive props: table, tilted chair, squashed / scaled objects; dense `Rock` mesh with and without a MeshCollider for optimization; concave `Arch (static)` and `Bracket (Rigidbody)` for Auto / decomposition) via `execute_code` / `manage_scene`, and screenshot with `manage_camera` (`capture_source: scene_view`). Leave the scene clean (no generated colliders, original meshes on colliders), delete generated test meshes (`Assets/AutoCollider/`), and reopen the user's scene afterwards.
    - `execute_code` compiles as **C# 6** (CodeDom): no local functions / pattern matching — use `System.Func` lambdas. Set `Selection` in one call and drive the UI in the next (selection events fire between calls). Find UI controls by label/class, never "first FloatField" — bound PropertyFields contain FloatFields too and you would edit the user's settings.
 3. Required tests per area:
    - Fitters: cube → exact box; UV sphere → sphere radius within 1%; cylinder mesh → capsule axis correct; rotated cube → OBB recovers rotation.

@@ -23,6 +23,9 @@ namespace AutoCollider.Editor
         public TargetSpace Space { get; set; }
         public List<FittedShape> Shapes { get; } = new();
         public List<string> Warnings { get; } = new();
+
+        /// <summary>Informational notes, e.g. what the Auto strategy chose.</summary>
+        public List<string> Notes { get; } = new();
         public TargetStatus Status { get; set; } = TargetStatus.Ok;
         public string Message { get; set; }
         public int RendererCount { get; set; }

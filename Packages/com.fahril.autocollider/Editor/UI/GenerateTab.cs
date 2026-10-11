@@ -81,6 +81,16 @@ namespace AutoCollider.Editor
             _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MaxTriangles)));
             _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MinIslandSize)));
 
+            var decomposition = Foldout(this, Strings.SectionDecomposition, "AutoCollider.Generate.Decomposition");
+            var decompositionHint = new Label(Strings.DecompositionHint);
+            decompositionHint.AddToClassList("ac-hint");
+            decomposition.Add(decompositionHint);
+            decomposition.Add(Field(settings, nameof(GenerationSettings.DecompositionResolution)));
+            decomposition.Add(Field(settings, nameof(GenerationSettings.MaxParts)));
+            decomposition.Add(Field(settings, nameof(GenerationSettings.ConcavityTolerance)));
+            decomposition.Add(Field(settings, nameof(GenerationSettings.PrimitiveFitThreshold)));
+            decomposition.Add(Field(settings, nameof(GenerationSettings.ConvexityThreshold)));
+
             var filters = Foldout(this, Strings.SectionFilters, "AutoCollider.Generate.Filters");
             filters.Add(Field(settings, nameof(GenerationSettings.IncludeChildren)));
             filters.Add(Field(settings, nameof(GenerationSettings.IncludeInactive)));
@@ -271,11 +281,12 @@ namespace AutoCollider.Editor
             _resultDetails.Clear();
             foreach (var result in report.Results)
             {
-                if (result.Status == TargetStatus.Ok) continue;
+                if (result.Status == TargetStatus.Ok && result.Notes.Count == 0) continue;
                 var name = result.Target != null ? result.Target.name : "?";
                 var lines = new List<string>();
                 if (!string.IsNullOrEmpty(result.Message)) lines.Add(result.Message);
                 lines.AddRange(result.Warnings);
+                lines.AddRange(result.Notes);
                 var line = new Label($"{name}: {string.Join(" ", lines)}");
                 line.AddToClassList(StatusClass(result.Status));
                 line.AddToClassList("ac-result__line");
@@ -336,7 +347,10 @@ namespace AutoCollider.Editor
                     TargetStatus.Skipped => Strings.StatusSkipped,
                     _ => Strings.StatusError,
                 };
-                status.tooltip = string.Join("\n", result.Warnings) + (result.Message ?? string.Empty);
+                var tips = new List<string>(result.Warnings);
+                tips.AddRange(result.Notes);
+                if (!string.IsNullOrEmpty(result.Message)) tips.Add(result.Message);
+                status.tooltip = string.Join("\n", tips);
                 status.AddToClassList(StatusClass(result.Status));
                 status.RemoveFromClassList("ac-hidden");
             }

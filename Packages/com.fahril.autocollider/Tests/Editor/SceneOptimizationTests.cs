@@ -76,6 +76,38 @@ namespace AutoCollider.Editor.Tests
         }
 
         [Test]
+        public void Generate_Auto_OnDynamicConcaveObject_CreatesConvexParts_OneUndo()
+        {
+            var mesh = TestMeshes.ToMesh(TestMeshes.LShape());
+            AssetDatabase.CreateAsset(mesh, $"{Folder}/L.asset");
+            var go = Renderable(mesh, "Bracket");
+            go.AddComponent<Rigidbody>();
+
+            var report = BatchProcessor.Generate(new[] { go }, new GenerationSettings(), Folder, false);
+
+            var colliders = go.GetComponent<ColliderGroup>().Entries.Select(e => e.Collider).ToList();
+            Assert.That(colliders.Count, Is.GreaterThan(1), "Several parts");
+            Assert.That(colliders.All(c => !(c is MeshCollider { convex: false })), "Every part is convex (allowed on a moving Rigidbody)");
+            Assert.That(report.Results[0].Notes.Any(n => n.Contains(Strings.StrategyConvexDecomposition)), "Auto explains its choice");
+            Assert.That(report.Stats.ResultParts, Is.EqualTo(colliders.Count));
+
+            Undo.PerformUndo();
+            Assert.That(go.GetComponent<ColliderGroup>() == null, "One Undo removes all parts");
+        }
+
+        [Test]
+        public void ReadMesh_IgnoresUnreferencedVertices()
+        {
+            var mesh = new Mesh { vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(100, 100, 100) }, triangles = new[] { 0, 1, 2 } };
+
+            MeshSource.ReadMesh(mesh, out var vertices, out var triangles);
+
+            Assert.That(vertices.Length, Is.EqualTo(3), "The far, unused vertex must not influence colliders");
+            Assert.That(triangles, Is.EqualTo(new[] { 0, 1, 2 }));
+            Object.DestroyImmediate(mesh);
+        }
+
+        [Test]
         public void Generate_Inflate_GrowsPrimitive()
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);

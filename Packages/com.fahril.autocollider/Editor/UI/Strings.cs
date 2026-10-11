@@ -41,6 +41,16 @@ namespace AutoCollider.Editor
         // Statistics
         public const string StatsLine = "Triangles {0:N0} → {1:N0} (−{2:0}%) · max error {3}";
         public const string MemoryLine = "Collision memory ≈ {0} → {1}";
+        public const string StatsParts = " · {0} parts";
+
+        // Convex decomposition & Auto
+        public const string SectionDecomposition = "Convex Decomposition & Auto";
+        public const string DecompositionHint = "Used by Convex Decomposition and Auto. Parts that fill a primitive well become boxes, spheres or capsules (cheaper).";
+        public const string StrategyConvexHull = "Convex Hull";
+        public const string StrategyConvexDecomposition = "Convex Decomposition";
+        public const string StrategyOptimizedMesh = "Optimized Mesh";
+        public const string NoteAutoChose = "Auto → {0}.";
+        public const string NoteComponentsExceedMaxParts = "{0} separate pieces need at least {0} parts (Max Parts is {1}).";
 
         // Presets
         public const string PresetLabel = "Preset";
@@ -153,6 +163,8 @@ namespace AutoCollider.Editor
             ColliderStrategy.Capsule => "A capsule along each mesh's longest direction.",
             ColliderStrategy.ConvexHull => "A convex mesh (≤ 255 triangles) wrapped around each mesh. Works with moving Rigidbodies.",
             ColliderStrategy.OptimizedMesh => "A simplified copy of the mesh (keeps holes and concave shapes). Static or kinematic objects only — see Mesh Optimization.",
+            ColliderStrategy.ConvexDecomposition => "Splits concave meshes into several convex parts (primitives where they fit). For moving Rigidbodies — see Convex Decomposition.",
+            ColliderStrategy.Auto => "Recommended. Per mesh: a primitive if one fits, else a convex hull, else convex parts (moving) or an optimized mesh (static).",
             _ => string.Empty,
         };
 

@@ -77,17 +77,21 @@ namespace AutoCollider.Editor
             }
         }
 
-        /// <summary>Vertices and triangle-topology indices of all submeshes.</summary>
+        /// <summary>
+        /// Triangles of all triangle-topology submeshes, and only the vertices they use (unreferenced vertices would
+        /// otherwise inflate fits and error measurements).
+        /// </summary>
         public static void ReadMesh(Mesh mesh, out float3[] vertices, out int[] triangles)
         {
             using var dataArray = Mesh.AcquireReadOnlyMeshData(mesh);
             var data = dataArray[0];
 
+            float3[] allVertices;
             using (var verts = new NativeArray<Vector3>(data.vertexCount, Allocator.Temp))
             {
                 data.GetVertices(verts);
-                vertices = new float3[verts.Length];
-                for (var i = 0; i < verts.Length; i++) vertices[i] = verts[i];
+                allVertices = new float3[verts.Length];
+                for (var i = 0; i < verts.Length; i++) allVertices[i] = verts[i];
             }
 
             var indices = new List<int>();
@@ -99,7 +103,28 @@ namespace AutoCollider.Editor
                 data.GetIndices(subIndices, sub);
                 indices.AddRange(subIndices);
             }
-            triangles = indices.ToArray();
+
+            CompactReferenced(allVertices, indices, out vertices, out triangles);
+        }
+
+        /// <summary>Keep only referenced vertices (first-use order), remapping the indices.</summary>
+        public static void CompactReferenced(float3[] allVertices, IReadOnlyList<int> indices, out float3[] vertices, out int[] triangles)
+        {
+            var remap = new int[allVertices.Length];
+            for (var i = 0; i < remap.Length; i++) remap[i] = -1;
+            var used = new List<float3>(allVertices.Length);
+            triangles = new int[indices.Count];
+            for (var i = 0; i < indices.Count; i++)
+            {
+                var index = indices[i];
+                if (remap[index] < 0)
+                {
+                    remap[index] = used.Count;
+                    used.Add(allVertices[index]);
+                }
+                triangles[i] = remap[index];
+            }
+            vertices = used.ToArray();
         }
 
         public static Mesh SharedMesh(Renderer renderer)

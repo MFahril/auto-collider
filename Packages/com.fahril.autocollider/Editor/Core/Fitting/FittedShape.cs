@@ -50,6 +50,9 @@ namespace AutoCollider.Editor
         /// <summary>Sampled deviation from the source mesh, for the heatmap (mesh shapes only).</summary>
         public ErrorMetric.Result Error;
 
+        /// <summary>Optional user-facing note from the strategy (e.g. "Auto chose Convex Hull").</summary>
+        public string Note;
+
         public bool IsRotated => !GeometryUtils.IsNearIdentity(Rotation);
 
         public bool IsMesh => Kind == ShapeKind.ConvexMesh || Kind == ShapeKind.ConcaveMesh;

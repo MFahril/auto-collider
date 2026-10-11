@@ -3,6 +3,17 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-10-12
+
+### Added
+- **Convex Decomposition** strategy (M3): splits concave meshes into convex parts for moving Rigidbodies — Burst voxelizer (solid for closed meshes), greedy merging by added empty space, PhysX 255-triangle cap per part, and parts that fit a box / sphere / capsule are replaced by that cheaper primitive.
+- **Auto** strategy, now the default: per mesh it picks a primitive if one fits, else one convex hull if the mesh is convex enough, else convex parts (moving objects) or an optimized mesh (static); the window explains each choice.
+- Settings: Decomposition Resolution, Max Parts, Concavity Tolerance, Primitive Fit Threshold, Convexity Threshold ("Convex Decomposition & Auto" foldout).
+- Statistics show the number of parts.
+
+### Fixed
+- Vertices not used by any triangle no longer influence collider fits or error numbers.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added

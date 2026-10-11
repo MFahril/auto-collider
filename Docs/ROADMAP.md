@@ -18,7 +18,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M0 | Foundation | – | ✅ |
 | M1 | Core generation | 1, 3, 5 | ✅ |
 | M2 | Optimization | 2 | ✅ |
-| M3 | Convex decomposition | 2 | ⬜ |
+| M3 | Convex decomposition | 2 | ✅ |
 | M4 | Scene editing | 4 | ⬜ |
 | M5 | Paint & skinned | 4 | ⬜ |
 | M6 | Runtime bridge features | 5 | ⬜ |
@@ -120,16 +120,19 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M3 — Convex decomposition ⬜
+## M3 — Convex decomposition ✅
 
-- [ ] Voxelizer (surface + interior flood fill)
-- [ ] `ConvexDecomposer` (grid regions → hull per region → greedy merge by concavity cost; `MaxParts`)
-- [ ] 256 guard per part
-- [ ] `PrimitiveReplacer` (fill ratio ≥ threshold → box/sphere/capsule)
-- [ ] `ConvexDecomposition` strategy + `Auto` strategy heuristic
-- [ ] Tests: every part convex & ≤ 255 faces, coverage within tolerance
+- [x] `Voxelizer` (Burst): surface voxels by exact triangle/box overlap (SAT), interior by flood-filling the outside (2-voxel padding), surface samples (≤ ½ voxel spacing) for hull points; closed meshes → solid, open → shell
+- [x] `ConvexDecomposer`: block regions (6 per axis, connected pieces per block) → hull per region (interior-voxel corners + surface samples) → greedy merge of adjacent regions by **added empty space** (merged waste − own wastes, ÷ object volume) with a deterministic min-heap; merges beyond `Concavity Tolerance` only to get under `Max Parts`; disconnected pieces always keep a part
+- [x] 256 guard per part (`TryBuildCapped`), region hull points capped at 128 to keep merges fast
+- [x] `PrimitiveReplacer`: part → box / sphere / capsule when hull volume ÷ primitive volume ≥ `Primitive Fit Threshold` (cheaper shape wins within 2 %)
+- [x] `ConvexDecomposition` strategy (stats + error for the whole part set, parts count) and **`Auto` strategy** (now the default): primitive if it fills ≥ threshold → convex hull if convexity (exact volume for watertight meshes, voxel estimate otherwise) ≥ threshold → decomposition (moving Rigidbody) / optimized mesh (static); explains its choice per mesh
+- [x] `ShapeMesher` (primitives → triangles, for measuring mixed results)
+- [x] Settings: Decomposition Resolution, Max Parts, Concavity Tolerance, Primitive Fit Threshold, Convexity Threshold (+ Generate tab foldout, Auto notes in results)
+- [x] Fix: `MeshSource.ReadMesh` drops vertices no triangle uses (they inflated fits and error numbers)
+- [x] Tests: triangle/box overlap, solid vs shell voxelization, sphere → 1 part / sphere primitive, L → 2–4 tight parts covering every vertex (< 1.2× true volume), arms → boxes, torus keeps its hole, Max Parts, disconnected pieces, determinism, primitive replacer, exact convexity, Auto choices, Auto capsule, shape mesher, Auto on a moving L in the scene (one Undo), unreferenced vertices
 
-**Done when:** dynamic sample objects get convex parts ≤ 255 faces; Auto picks sensible types on the sample scene.
+**Done when:** dynamic sample objects get convex parts ≤ 255 faces; Auto picks sensible types on the sample scene. → *Verified 2026-10-12: 100/100 tests. Auto on the dev scene (9 objects, 2.0 s): table → box top + capsule legs, chair → boxes, ball → sphere, pillar → capsule, squashed ball and rock → convex hull (no primitive fits; rock hull deviates ≤ 11.6 cm on 2.8 m), crate → box, static arch → optimized mesh, L-bracket on a Rigidbody → 2 box parts.*
 
 ---
 
@@ -196,7 +199,8 @@ Tests (84 EditMode, all green, ~5 s)
 - Localization of `Strings`
 - Clean up orphaned generated meshes (undoing a convex generation leaves its mesh sub-asset behind) — `Tools ▸ Auto Collider ▸ Clean Unused Meshes`
 - Batch generation for prefab / model assets selected in the Project window (the writer is already prefab-aware)
-- Burst port of `QuickHull3D` (managed today; dense input is thinned first)
+- Burst port of `QuickHull3D` (managed today; dense input is thinned first) — would also speed up decomposition merges (~1.5 ms per 256-point hull)
+- Decomposition: split regions along the best cutting plane (better corners than fixed initial blocks)
 - Error heatmap in the Generate tab live preview (Optimize tab has it)
 - Lower minimum Unity version (currently 6000.6 because of built-in Burst 2.0 / Collections 6.6 versions)
 
@@ -210,3 +214,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M0 ✅ | Package skeleton, assemblies, settings page, USS theme, 16 tests green |
 | 2026-10-12 | M1 ✅ | Fitters, QuickHull, pipeline, writer, ColliderGroup, batch + single Undo, window Generate tab, inspector, 60 tests green; package 0.2.0 |
 | 2026-10-12 | M2 ✅ | Burst QEM simplifier, cleaner, inflate, error metric + heatmap, Optimized Mesh strategy, Optimize tab (apply / restore), presets, 84 tests green; package 0.3.0 |
+| 2026-10-12 | M3 ✅ | Burst voxelizer, convex decomposition with greedy concavity merge, primitive replacement, Auto strategy (default), 100 tests green; package 0.4.0 |

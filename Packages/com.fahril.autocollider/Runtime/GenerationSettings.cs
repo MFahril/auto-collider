@@ -10,8 +10,8 @@ namespace AutoCollider
     [Serializable]
     public sealed class GenerationSettings
     {
-        [Tooltip("How collider shapes are produced from each mesh.")]
-        public ColliderStrategy Strategy = ColliderStrategy.BestPrimitive;
+        [Tooltip("How collider shapes are produced from each mesh. Auto picks the cheapest shape that fits.")]
+        public ColliderStrategy Strategy = ColliderStrategy.Auto;
 
         [Tooltip("Per Renderer: every mesh gets its own collider. Combined: the whole object is fitted as one shape.")]
         public MeshGranularity Granularity = MeshGranularity.PerRenderer;
@@ -62,6 +62,26 @@ namespace AutoCollider
         [Tooltip("Drop small disconnected mesh pieces (bolts, decals) smaller than this fraction of the object size before optimizing (0 = keep all).")]
         [Range(0f, 0.5f)]
         public float MinIslandSize;
+
+        [Tooltip("Convex decomposition detail: voxels along the longest side. Higher = more accurate parts, slower.")]
+        [Range(16, 128)]
+        public int DecompositionResolution = 40;
+
+        [Tooltip("Upper limit for convex parts per mesh. Disconnected pieces always get their own part.")]
+        [Range(1, 64)]
+        public int MaxParts = 12;
+
+        [Tooltip("How much empty space a merge of two parts may add (fraction of the object volume). Lower = more, tighter parts.")]
+        [Range(0f, 0.25f)]
+        public float ConcavityTolerance = 0.03f;
+
+        [Tooltip("A convex part (or, for Auto, a whole mesh) becomes a box / sphere / capsule when it fills at least this fraction of it. 1 = never.")]
+        [Range(0.5f, 1f)]
+        public float PrimitiveFitThreshold = 0.85f;
+
+        [Tooltip("Auto: meshes at least this convex (volume ÷ hull volume) get one convex hull; less convex meshes get decomposition (moving) or an optimized mesh (static).")]
+        [Range(0.5f, 1f)]
+        public float ConvexityThreshold = 0.85f;
 
         /// <summary>Deep copy (the material reference is shared).</summary>
         public GenerationSettings Clone() => (GenerationSettings)MemberwiseClone();

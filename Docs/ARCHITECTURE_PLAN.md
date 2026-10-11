@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M2 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M3 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -226,8 +226,9 @@ See §6 for algorithm detail. Components:
 | `ClusterSimplifier` ✅ | Burst job: grid vertex clustering with a **quadric-error** representative per cell (pseudo-inverse solve around the cell mean) |
 | `MeshCleaner` ✅ | Weld by epsilon, drop degenerate/duplicate tris, optional remove islands < X% of bounds |
 | `InflateDeflate` ✅ | Offset meshes along angle-weighted normals; grow / shrink primitives analytically |
-| `ConvexDecomposer` (M3) | Voxel/grid split → hull per region → greedy merge of adjacent hulls → 256 guard |
-| `PrimitiveReplacer` (M3) | Part → box/sphere/capsule when fill ratio ≥ threshold |
+| `Voxelizer` ✅ | Burst: exact triangle/box surface voxels, flood-filled interior, surface samples |
+| `ConvexDecomposer` ✅ | Block regions → hull per region → greedy merge by added empty space (min-heap) → 256 guard → primitive replacement |
+| `PrimitiveReplacer` ✅ | Part → box / sphere / capsule when hull volume ÷ primitive volume ≥ threshold |
 | `ErrorMetric` ✅ | Burst, parallel. Sampled source↔collider distance (max, mean); per-vertex for heatmap |
 | `ColliderStats` ✅ | verts/tris before→after, part count, estimated memory, bake ms, savings % |
 | `MeshOptimizer` ✅ | Pipeline: weld → islands → simplify → inflate → measure; `OptimizeConvex` = capped hull |
@@ -246,9 +247,9 @@ See §6 for algorithm detail. Components:
   | `Capsule` ✅ | best local axis, or PCA axis when rotation is allowed and ≥ 1 % tighter |
   | `ConvexHull` ✅ | one convex mesh (≤ 255 triangles); flat geometry falls back to a box |
   | `OptimizedMesh` ✅ | simplified concave MeshCollider (static / kinematic only; dynamic Rigidbody → convex hull + warning) |
-  | `ConvexDecomposition` | N convex parts (+ primitive replacement) |
+  | `ConvexDecomposition` ✅ | N convex parts (+ primitive replacement); stats for the whole set |
   | `PerBone` | skinned: one shape per bone, parented to the bone |
-  | **`Auto`** | picks per object (see §6.5) |
+  | **`Auto`** ✅ (default) | picks per mesh: primitive → hull → decomposition / optimized mesh (see §6.5) |
 - **`GenerationPipeline`**: `Plan` (collect targets, read meshes) → `Compute` (strategies, pure data) → `Preview` (draw ghosts, no scene change) → `Apply` (`ColliderWriter`).
 - **`BatchProcessor`**: targets = Hierarchy selection (scene objects; prefab instances become overrides). Project-window prefab/model assets: backlog. Options: include children, filters (name regex, layer mask, min bounds size, renderer enabled, LOD0 only, skip objects already having user colliders). Cancelable progress; **single Undo group**; per-object status (OK / Skipped(reason) / Warning) shown in the window.
 - **`ColliderWriter`**: creates `[Colliders]` container, adds components via Undo, rotated primitives → child GO, registers `ColliderEntry`s, saves meshes through `GeneratedMeshStore`, handles prefab instances/assets per CLAUDE.md rule 7. "Replace mode": *Replace generated* (default) / *Append* / *Replace all (incl. user colliders, with confirm)*.
@@ -373,13 +374,16 @@ QuickHull3D on (optionally pre-simplified) vertices → if faces > 255: reduce i
 
 ### 6.3 Convex decomposition (dynamic, multi-part)
 
-1. **Voxelize** surface + flood-fill interior at resolution from `DecompositionGrid` (2–6 → coarse cells; internally voxels per cell for accuracy).
-2. **Initial split:** regions = occupied grid cells (like MCO); triangles clipped/assigned to cells.
-3. **Hull per region** (QuickHull3D).
-4. **Greedy merge:** for adjacent part pairs, compute merged hull; *concavity cost* = (hull volume − covered voxel volume) / hull volume. Merge cheapest pair while cost < `MergeTolerance` and part count > `MinParts`. → fewer, bigger parts than a fixed grid.
-5. **256 guard** per part (as 6.2).
-6. **`PrimitiveReplacer`:** for each part, fit OBB/sphere/capsule; if fill ratio ≥ `PrimitiveThreshold` (default 0.85) replace with the primitive (rotated → child GO).
-7. Optional `MaxParts` cap (merge until satisfied).
+*Implemented in M3 (`Voxelizer`, `ConvexDecomposer`, `PrimitiveReplacer`).*
+
+1. **Voxelize** (Burst) at `Decomposition Resolution` voxels along the longest side (default 40): surface voxels by exact triangle/box overlap (SAT), interior by flood-filling the outside from a 2-voxel padding. Also emits surface samples (≤ ½ voxel apart) as hull points. Closed meshes become solid; open meshes a shell.
+2. **Initial split:** 6 blocks per axis; each block's connected occupied voxels form a region (so separate pieces in one block never share a hull). Region points = corners of interior voxels (inside the mesh) + surface samples, reduced to their hull (≤ 128 points kept).
+3. **Greedy merge** (deterministic min-heap on cost, ties by id): cost of merging adjacent A and B = *added empty space* = waste(hull(A∪B)) − waste(A) − waste(B), divided by the object's solid volume (waste = hull volume − estimated solid volume; solid = interior voxels + ½ surface voxels). Merge the cheapest pair while cost ≤ `Concavity Tolerance` (default 0.03); beyond that only while parts > `Max Parts`. Disconnected pieces never merge, so they always keep their own part.
+4. **256 guard** per part (as 6.2).
+5. **`PrimitiveReplacer`:** best of sphere / capsule / box by fill ratio (hull volume ÷ primitive volume; cheaper shape wins within 2 %); replace when ≥ `Primitive Fit Threshold` (default 0.85; 1 disables). Rotated primitives land on child GameObjects as usual.
+6. Stats / error for the whole set are measured against the union of parts (primitives meshed by `ShapeMesher`) and attached to the first part.
+
+Known limit: initial blocks don't align with the shape's features, so an inner corner can leave a small irregular hull between primitive parts (backlog: plane-cut refinement). Cost is dominated by managed QuickHull during merges (~1–2 s for ~150 regions; backlog: Burst QuickHull).
 
 ### 6.4 Per-bone (skinned)
 
@@ -387,17 +391,19 @@ Assign each vertex to its highest-weight bone (threshold), skip bones with < N v
 
 ### 6.5 Auto strategy heuristic
 
+*Implemented in M3 (`AutoStrategy`, the default strategy), per mesh / part:*
 ```
-if skinned → PerBone (capsules)
-else:
-  fit box(OBB), sphere, capsule, hull
-  best primitive = min error; if fill ratio ≥ 0.85 → that primitive
-  else if object (or parent) has non-kinematic Rigidbody →
-       hull if hull fill ≥ 0.75 else ConvexDecomposition
-  else (static) →
-       hull if hull fill ≥ 0.9 else OptimizedMesh
+hull = convex hull (null → flat → box)
+best primitive (sphere / capsule / box, cheaper wins within 2 %);
+if hull volume ÷ primitive volume ≥ PrimitiveFitThreshold (0.85) → that primitive
+convexity = solid volume ÷ hull volume
+          (exact signed volume when the welded mesh is watertight, else a 24-voxel estimate)
+if convexity ≥ ConvexityThreshold (0.85)  → ConvexHull
+else if moved by a non-kinematic Rigidbody → ConvexDecomposition
+else                                       → OptimizedMesh
+(M5: skinned meshes → PerBone)
 ```
-Thresholds live in the preset so users can tune them.
+Both thresholds are `GenerationSettings` fields (so presets carry them). Auto adds a note per mesh ("Auto → Capsule.") shown in the window's result details and status tooltips.
 
 ### 6.6 Error metric / heatmap
 
@@ -435,7 +441,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M0** Foundation | Package skeleton, `package.json` (+ burst/collections/physics deps), 3 asmdefs, `Strings`, settings provider stub, USS theme file, remove empty `Assets/Auto Collider Generator/` | Package compiles; Project Settings page visible |
 | **M1** Core generation ✅ | `MeshSource`, AABB/PCA-OBB/min-OBB, Ritter/Welzl, capsule fitter, `QuickHull3D` (255 cap), strategies BestPrimitive/Box/Sphere/Capsule/ConvexHull, pipeline, `ColliderWriter`, `GeneratedMeshStore`, `ColliderGroup` (entries + ownership), `BatchProcessor` (selection, single Undo), window Generate tab, basic inspector | Generate for 10 selected objects, one Ctrl+Z reverts all; fitter tests pass |
 | **M2** Optimization ✅ | `ClusterSimplifier` (Burst, QEM), `MeshCleaner`, `InflateDeflate`, `OptimizedMesh` strategy, stats, presets (4 built-in + save), Optimize tab, heatmap | Sample mesh tris −80% at Balanced with max error under threshold; deterministic |
-| **M3** Decomposition | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
+| **M3** Decomposition ✅ | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
 | **M4** Scene editing | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
 | **M5** Paint & skinned | Paint mode (brush/box triangle select), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
 | **M6** Runtime | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |

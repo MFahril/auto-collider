@@ -38,10 +38,11 @@ namespace AutoCollider.Editor
 
             var allowRotation = settings.AllowRotation && space.IsUniform;
             if (settings.AllowRotation && !space.IsUniform) result.Warn(Strings.WarningNonUniformScale);
-            var context = new FitContext(allowRotation);
+            var isDynamic = IsDynamic(target);
+            var context = new FitContext(allowRotation, isDynamic);
 
             var strategyKind = settings.Strategy;
-            if (strategyKind == ColliderStrategy.OptimizedMesh && IsDynamic(target))
+            if (strategyKind == ColliderStrategy.OptimizedMesh && isDynamic)
             {
                 // PhysX: non-kinematic Rigidbodies cannot use concave mesh colliders.
                 result.Warn(Strings.WarningDynamicConcave);
@@ -77,8 +78,10 @@ namespace AutoCollider.Editor
 
                     // The optimized-mesh path inflates inside the optimizer; everything else is inflated here.
                     if (shape.Kind != ShapeKind.ConcaveMesh) InflateDeflate.Apply(shape, settings.Inflate);
-                    if (shape.Kind == ShapeKind.ConvexMesh && shape.Stats == null) MeasureMesh(shape, part);
+                    // A lone hull is measured here; multi-part strategies attach stats for the whole set themselves.
+                    if (shapes.Count == 1 && shape.Kind == ShapeKind.ConvexMesh && shape.Stats == null) MeasureMesh(shape, part);
                     if (shape.Stats.HasValue) result.Stats.Add(shape.Stats.Value);
+                    if (!string.IsNullOrEmpty(shape.Note)) result.Notes.Add($"{part.Label}: {shape.Note}");
 
                     result.Shapes.Add(shape);
                 }
