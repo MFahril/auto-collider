@@ -1,0 +1,20 @@
+{
+    "name": "AutoCollider.Editor",
+    "rootNamespace": "AutoCollider.Editor",
+    "references": [
+        "AutoCollider.Runtime",
+        "Unity.Burst",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

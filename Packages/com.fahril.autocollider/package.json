@@ -1,0 +1,23 @@
+{
+  "name": "com.fahril.autocollider",
+  "version": "0.2.0",
+  "displayName": "Auto Collider",
+  "description": "Generate, optimize and edit colliders for one or many objects: fitted primitives, convex hulls, convex decomposition, simplified mesh colliders, in-scene collider editing and a multi-collider group component.",
+  "unity": "6000.6",
+  "author": {
+    "name": "M. Fahril Ilmi"
+  },
+  "keywords": [
+    "collider",
+    "physics",
+    "convex",
+    "mesh collider",
+    "optimization",
+    "editor tool"
+  ],
+  "dependencies": {
+    "com.unity.burst": "2.0.0",
+    "com.unity.collections": "6.6.0",
+    "com.unity.modules.physics": "1.0.0"
+  }
+}

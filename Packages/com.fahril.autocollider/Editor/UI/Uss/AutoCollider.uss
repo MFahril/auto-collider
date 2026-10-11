@@ -1,0 +1,308 @@
+/*
+ * Auto Collider — shared editor stylesheet.
+ * Apply with AutoColliderStyles.Apply(root). Plugin colors are defined once here, per editor skin;
+ * neutral colors come from Unity's theme variables so both skins look native.
+ */
+
+/* ---------- Tokens ---------- */
+
+.ac-root {
+    --ac-spacing-xs: 2px;
+    --ac-spacing-s: 4px;
+    --ac-spacing-m: 8px;
+    --ac-spacing-l: 12px;
+    --ac-radius: 4px;
+    --ac-font-title: 18px;
+    --ac-font-section: 13px;
+}
+
+.ac-root--dark {
+    --ac-accent: #4ea3ff;
+    --ac-accent-muted: rgba(78, 163, 255, 0.18);
+    --ac-ok: #5cd27f;
+    --ac-warning: #f2c14e;
+    --ac-error: #ff6b6b;
+    --ac-subtle-text: #9a9a9a;
+    --ac-panel: rgba(255, 255, 255, 0.04);
+}
+
+.ac-root--light {
+    --ac-accent: #1f6fd1;
+    --ac-accent-muted: rgba(31, 111, 209, 0.14);
+    --ac-ok: #23944a;
+    --ac-warning: #b07d00;
+    --ac-error: #c62828;
+    --ac-subtle-text: #5c5c5c;
+    --ac-panel: rgba(0, 0, 0, 0.04);
+}
+
+/* ---------- Page layout ---------- */
+
+.ac-page {
+    padding: var(--ac-spacing-m) var(--ac-spacing-l);
+}
+
+.ac-title {
+    font-size: var(--ac-font-title);
+    -unity-font-style: bold;
+    margin-bottom: var(--ac-spacing-xs);
+}
+
+.ac-subtitle {
+    color: var(--ac-subtle-text);
+    white-space: normal;
+    margin-bottom: var(--ac-spacing-m);
+}
+
+/* ---------- Sections ---------- */
+
+.ac-section {
+    background-color: var(--ac-panel);
+    border-radius: var(--ac-radius);
+    border-width: 1px;
+    border-color: var(--unity-colors-default-border);
+    padding: var(--ac-spacing-s) var(--ac-spacing-m) var(--ac-spacing-m) var(--ac-spacing-m);
+    margin-bottom: var(--ac-spacing-m);
+}
+
+.ac-section__header {
+    font-size: var(--ac-font-section);
+    -unity-font-style: bold;
+    color: var(--ac-accent);
+    padding-bottom: var(--ac-spacing-s);
+    margin-bottom: var(--ac-spacing-s);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ac-accent-muted);
+}
+
+/* ---------- Rows & buttons ---------- */
+
+.ac-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.ac-row__grow {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.ac-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: var(--ac-spacing-s);
+}
+
+.ac-button {
+    min-height: 22px;
+    padding-left: var(--ac-spacing-m);
+    padding-right: var(--ac-spacing-m);
+}
+
+.ac-button--primary {
+    background-color: var(--ac-accent);
+    color: #ffffff;
+    -unity-font-style: bold;
+}
+
+/* ---------- Status ---------- */
+
+.ac-status--ok { color: var(--ac-ok); }
+.ac-status--warning { color: var(--ac-warning); }
+.ac-status--error { color: var(--ac-error); }
+
+.ac-status--muted { color: var(--ac-subtle-text); }
+
+.ac-hidden {
+    display: none;
+}
+
+/* ---------- Shared text ---------- */
+
+.ac-hint {
+    color: var(--ac-subtle-text);
+    white-space: normal;
+    font-size: 11px;
+    margin: 0 var(--ac-spacing-xs) var(--ac-spacing-s) var(--ac-spacing-xs);
+}
+
+.ac-empty {
+    color: var(--ac-subtle-text);
+    white-space: normal;
+    -unity-text-align: middle-center;
+    padding: var(--ac-spacing-l) var(--ac-spacing-m);
+}
+
+.ac-chip {
+    font-size: 10px;
+    padding: 0 var(--ac-spacing-s);
+    margin-left: var(--ac-spacing-s);
+    border-radius: 8px;
+    background-color: var(--ac-accent-muted);
+    -unity-text-align: middle-center;
+    min-width: 36px;
+}
+
+.ac-button--small {
+    min-height: 18px;
+    font-size: 11px;
+    padding-left: var(--ac-spacing-s);
+    padding-right: var(--ac-spacing-s);
+}
+
+.ac-row--wrap {
+    flex-wrap: wrap;
+    margin-bottom: var(--ac-spacing-m);
+}
+
+.ac-foldout > .unity-foldout__toggle {
+    -unity-font-style: bold;
+    color: var(--ac-accent);
+    margin-left: 0;
+}
+
+/* ---------- Window ---------- */
+
+.ac-window {
+    flex-grow: 1;
+}
+
+.ac-tab {
+    padding: var(--ac-spacing-m);
+}
+
+.ac-placeholder {
+    margin-top: var(--ac-spacing-l);
+}
+
+.ac-target-list {
+    min-height: 26px;
+}
+
+.ac-target-row {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    padding: 0 var(--ac-spacing-s);
+}
+
+.ac-target-row__icon {
+    width: 16px;
+    height: 16px;
+    margin-right: var(--ac-spacing-s);
+    flex-shrink: 0;
+}
+
+.ac-target-row__name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ac-target-row__info {
+    color: var(--ac-subtle-text);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.ac-actions {
+    border-color: var(--ac-accent-muted);
+}
+
+.ac-actions .ac-button--primary {
+    min-height: 28px;
+    font-size: 13px;
+}
+
+.ac-result {
+    margin-top: var(--ac-spacing-m);
+    padding-top: var(--ac-spacing-s);
+    border-top-width: 1px;
+    border-top-color: var(--unity-colors-default-border);
+}
+
+.ac-result__summary {
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.ac-result__line {
+    white-space: normal;
+    font-size: 11px;
+}
+
+/* ---------- Collider Group inspector ---------- */
+
+.ac-inspector {
+    margin-top: var(--ac-spacing-s);
+}
+
+.ac-summary {
+    padding: var(--ac-spacing-s) var(--ac-spacing-xs) var(--ac-spacing-m) var(--ac-spacing-xs);
+}
+
+.ac-summary__title {
+    font-size: 15px;
+    -unity-font-style: bold;
+}
+
+.ac-summary__subtitle {
+    color: var(--ac-subtle-text);
+    white-space: normal;
+}
+
+.ac-summary__cost {
+    margin-top: var(--ac-spacing-xs);
+    color: var(--ac-accent);
+}
+
+.ac-entry-list {
+    min-height: 26px;
+}
+
+.ac-entry-row {
+    flex-direction: row;
+    align-items: center;
+    height: 22px;
+    padding: 0 var(--ac-spacing-xs);
+}
+
+.ac-entry-row--header {
+    height: 18px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--unity-colors-default-border);
+    margin-bottom: var(--ac-spacing-xs);
+}
+
+.ac-entry-row--header > Label {
+    color: var(--ac-subtle-text);
+    font-size: 10px;
+}
+
+.ac-entry-row__icon {
+    width: 16px;
+    height: 16px;
+    margin-right: var(--ac-spacing-s);
+    flex-shrink: 0;
+}
+
+.ac-entry-row__label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ac-entry-row__toggle {
+    width: 34px;
+    flex-shrink: 0;
+    margin: 0;
+    -unity-text-align: middle-center;
+    justify-content: center;
+}
+
+.ac-entry-row__select {
+    width: 48px;
+    flex-shrink: 0;
+}

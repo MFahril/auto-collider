@@ -1,0 +1,219 @@
+using System.Collections.Generic;
+using Unity.Mathematics;
+using UnityEditor;
+using UnityEngine;
+
+namespace AutoCollider.Editor
+{
+    /// <summary>
+    /// Apply stage: writes fitted shapes into the scene as collider components, fully Undo-able.
+    /// Axis-aligned primitives and meshes go on the <c>[Colliders]</c> container; rotated primitives get their own child.
+    /// Callers group several applies into one Undo step (see <see cref="BatchProcessor"/>).
+    /// </summary>
+    internal sealed class ColliderWriter
+    {
+        private readonly GeneratedMeshStore _meshStore;
+        private readonly string _containerName;
+
+        public ColliderWriter(GeneratedMeshStore meshStore, string containerName)
+        {
+            _meshStore = meshStore;
+            _containerName = containerName;
+        }
+
+        /// <summary>Write <paramref name="result"/> to its target. Updates the result's created/removed counts.</summary>
+        public void Apply(TargetResult result, GenerationSettings settings)
+        {
+            var target = result.Target;
+            if (target == null || result.Shapes.Count == 0) return;
+
+            var group = target.GetComponent<ColliderGroup>();
+            if (group == null) group = Undo.AddComponent<ColliderGroup>(target);
+            Undo.RecordObject(group, Strings.UndoGenerate);
+
+            result.CollidersRemoved += settings.Replace switch
+            {
+                ReplaceMode.ReplaceGenerated => RemoveEntries(group, e => e.Generated && !e.Locked),
+                ReplaceMode.ReplaceAll => RemoveAllExceptLocked(group),
+                _ => 0,
+            };
+            group.RemoveMissing();
+
+            var container = EnsureContainer(group);
+            var space = result.Space;
+            var libraryName = target.name;
+
+            for (var i = 0; i < result.Shapes.Count; i++)
+            {
+                var shape = result.Shapes[i];
+                var collider = CreateCollider(shape, container, space, libraryName);
+                if (collider == null) continue;
+
+                if (!(collider is MeshCollider { convex: false })) collider.isTrigger = settings.IsTrigger;
+                collider.sharedMaterial = settings.Material;
+                group.AddEntry(new ColliderEntry(collider, shape.Label, i, generated: true));
+                result.CollidersCreated++;
+            }
+
+            group.Recipe.Settings = settings.Clone();
+            EditorUtility.SetDirty(group);
+            if (PrefabUtility.IsPartOfPrefabInstance(group))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(group);
+        }
+
+        /// <summary>Remove generated, unlocked colliders. Removes the container and the group when nothing is left.</summary>
+        public static int RemoveGenerated(ColliderGroup group)
+        {
+            if (group == null) return 0;
+            Undo.RecordObject(group, Strings.UndoRemove);
+            var removed = RemoveEntries(group, e => e.Generated && !e.Locked);
+            group.RemoveMissing();
+
+            if (group.Entries.Count == 0)
+            {
+                var container = group.Container;
+                if (container != null && IsDisposableObject(container.gameObject))
+                    Undo.DestroyObjectImmediate(container.gameObject);
+                Undo.DestroyObjectImmediate(group);
+            }
+            else
+            {
+                EditorUtility.SetDirty(group);
+            }
+            return removed;
+        }
+
+        private Collider CreateCollider(FittedShape shape, Transform container, in TargetSpace space, string libraryName)
+        {
+            // Rotation is only produced for uniformly scaled targets, so dividing by any scale component is exact.
+            var host = container.gameObject;
+            var center = space.ToLocalPoint(shape.Center);
+            var uniformScale = math.abs(space.Scale.x);
+
+            if (shape.Kind != ShapeKind.ConvexMesh && shape.IsRotated)
+            {
+                host = CreateChild(container, shape.Label);
+                host.transform.localPosition = center;
+                host.transform.localRotation = shape.Rotation;
+                center = float3.zero;
+            }
+
+            switch (shape.Kind)
+            {
+                case ShapeKind.Box:
+                {
+                    var box = Undo.AddComponent<BoxCollider>(host);
+                    box.center = center;
+                    box.size = shape.IsRotated ? shape.Size / uniformScale : space.ToLocalSize(shape.Size);
+                    return box;
+                }
+                case ShapeKind.Sphere:
+                {
+                    var sphere = Undo.AddComponent<SphereCollider>(host);
+                    sphere.center = center;
+                    sphere.radius = shape.Radius / math.cmax(math.abs(space.Scale));
+                    return sphere;
+                }
+                case ShapeKind.Capsule:
+                {
+                    var capsule = Undo.AddComponent<CapsuleCollider>(host);
+                    var d = shape.Direction;
+                    var scale = math.abs(space.Scale);
+                    var radialScale = shape.IsRotated ? uniformScale : math.max(scale[(d + 1) % 3], scale[(d + 2) % 3]);
+                    var axialScale = shape.IsRotated ? uniformScale : scale[d];
+                    capsule.center = center;
+                    capsule.direction = d;
+                    capsule.radius = shape.Radius / radialScale;
+                    capsule.height = shape.Height / axialScale;
+                    return capsule;
+                }
+                case ShapeKind.ConvexMesh:
+                {
+                    var hull = shape.Hull;
+                    var vertices = new Vector3[hull.Vertices.Length];
+                    for (var v = 0; v < vertices.Length; v++) vertices[v] = space.ToLocalPoint(hull.Vertices[v]);
+                    var mesh = _meshStore.GetOrCreate(libraryName, shape.Label, vertices, hull.Triangles);
+
+                    var meshCollider = Undo.AddComponent<MeshCollider>(host);
+                    meshCollider.sharedMesh = mesh;
+                    meshCollider.convex = true;
+                    return meshCollider;
+                }
+                default:
+                    return null;
+            }
+        }
+
+        private Transform EnsureContainer(ColliderGroup group)
+        {
+            if (group.Container != null) return group.Container;
+
+            var target = group.gameObject;
+            var go = new GameObject(_containerName);
+            go.transform.SetParent(target.transform, false);
+            go.layer = target.layer;
+            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(target));
+            Undo.RegisterCreatedObjectUndo(go, Strings.UndoGenerate);
+            group.Container = go.transform;
+            return go.transform;
+        }
+
+        private static GameObject CreateChild(Transform container, string name)
+        {
+            var go = new GameObject(string.IsNullOrEmpty(name) ? "Collider" : name);
+            go.transform.SetParent(container, false);
+            go.layer = container.gameObject.layer;
+            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(container.gameObject));
+            Undo.RegisterCreatedObjectUndo(go, Strings.UndoGenerate);
+            return go;
+        }
+
+        private static int RemoveEntries(ColliderGroup group, System.Predicate<ColliderEntry> match)
+        {
+            var toRemove = new List<ColliderEntry>();
+            foreach (var entry in group.Entries)
+                if (match(entry)) toRemove.Add(entry);
+
+            var removed = 0;
+            foreach (var entry in toRemove)
+            {
+                if (DestroyCollider(entry.Collider, group.Container)) removed++;
+                group.RemoveEntry(entry);
+            }
+            return removed;
+        }
+
+        private static int RemoveAllExceptLocked(ColliderGroup group)
+        {
+            var removed = RemoveEntries(group, e => !e.Locked);
+
+            var locked = new HashSet<Collider>();
+            foreach (var entry in group.Entries)
+                if (entry.Collider != null) locked.Add(entry.Collider);
+
+            foreach (var collider in group.GetComponentsInChildren<Collider>(true))
+                if (!locked.Contains(collider) && DestroyCollider(collider, group.Container))
+                    removed++;
+            return removed;
+        }
+
+        /// <summary>Destroy a collider; also its GameObject when that is a dedicated child of the container.</summary>
+        private static bool DestroyCollider(Collider collider, Transform container)
+        {
+            if (collider == null) return false;
+            var go = collider.gameObject;
+            Undo.DestroyObjectImmediate(collider);
+
+            if (container != null && go != null && go.transform != container
+                && go.transform.IsChildOf(container) && IsDisposableObject(go))
+                Undo.DestroyObjectImmediate(go);
+            return true;
+        }
+
+        /// <summary>True when the object holds only a Transform and has no children (safe to delete).</summary>
+        private static bool IsDisposableObject(GameObject go)
+        {
+            return go.transform.childCount == 0 && go.GetComponents<Component>().Length == 1;
+        }
+    }
+}
