@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M5 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M6 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -181,6 +181,7 @@ internal sealed class FittedShape {
 [Serializable] public sealed class ColliderEntry {      // private serialized fields, public getters
     Collider Collider; string Label; int PartId;         // PartId: producing part (-1 = manual, ≥ 10000 = painted region)
     bool OwnsGameObject;                                 // GO was created by us (child of container / bone) → removal deletes it
+    int Lod;                                             // M6: LOD level it was fitted for (-1 = every LOD) → ColliderLodFollower
     bool Generated;                                      // ownership → only these are ever deleted by the tool
     bool Locked;                                         // regenerate / remove skip locked entries
 }
@@ -288,11 +289,16 @@ public class ColliderGroup : MonoBehaviour {
 }
 ```
 
-- **Event routing:** if a `Rigidbody` exists on/above the group, callbacks arrive on the Rigidbody GO → resolve part via `collision.GetContact(i).thisCollider`. Without Rigidbody, each collider GO gets a lightweight `ColliderRelay` (added only when someone subscribes / option enabled) that forwards to the group.
-- **Editor-facing:** inspector list, solo/hide, lock, regenerate from `GenerationRecipe`, optimize, remove generated.
+*Implemented in M6.*
+
+- **Event routing (zero cost until used):** the first subscription to any event (play mode) adds a `ColliderRelay` to every object that receives physics messages for the tracked colliders — each collider's own object and its Rigidbody's object. `ColliderStayRelay` (Stay messages) is added only when `CollisionStay` / `TriggerStay` has a subscriber, because Unity calls Stay every step for every contact. `RefreshRouting()` covers colliders added at runtime.
+  - *Collisions:* the part is exact — `Collision.thisCollider` (also on Exit, which has no contacts). Unity may deliver the message to the Rigidbody object and the collider object; only the canonical receiver (Rigidbody object, else the collider's object) is accepted, so nothing is reported twice.
+  - *Triggers:* `OnTrigger*` only passes the other collider, and the shared container holds many colliders on one object, so `TriggerPairs` resolves the part: on Enter the receiver's unpaired candidate with the best overlap (`Physics.ComputePenetration` > bounds within contact offset), remembered per other collider; Exit takes the paired entry that no longer overlaps; Stay cycles through the pairs within a step. A Rigidbody object also receives its children's trigger messages — without an overlapping candidate of its own, the message is ignored there (the child's relay reports it).
+  - `TryGetEntry` is a dictionary lookup (rebuilt after `OnAfterDeserialize` / when an entry was re-pointed).
+- **Editor-facing:** inspector list, solo/hide, lock, regenerate from `GenerationRecipe`, optimize, remove generated; Bulk Edit (trigger, layer, material, layer overrides, contacts); *Runtime* foldout (events how-to, Add LOD Follower).
 - **Optional runtime components:**
-  - `AnimatedMeshCollider` — `Source { BakeMesh, SharedMesh }`, `Update { EveryFrame, EveryNFrames, TargetHz }`, `OnlyWhenVisible`, `RootOnly`. Concave only (warn if convex).
-  - `ColliderLodFollower` — with `LODGroup`, enables only entries tagged for the active LOD.
+  - `AnimatedMeshCollider` — `AnimatedMeshSource { BakeMesh, SharedMesh }`, `ColliderUpdateMode { EveryFrame, EveryNFrames, TargetHz }` (pure `RefreshSchedule`), `OnlyWhenVisible`. Bakes with `useScale: true` into an owned mesh (destroyed with the component, original mesh restored); a target on another transform gets the vertices transformed. Re-assigns `null` first so the collider re-cooks. Shared Mesh refreshes only when the renderer's mesh is swapped. Added via `GameObject ▸ Auto Collider ▸ Add Animated Mesh Collider` (convex under moving Rigidbodies); its inspector warns about concave-on-dynamic and Read/Write with one-click fixes.
+  - `ColliderLodFollower` — Unity has no API for the active LOD, so `LodMath` mirrors LODGroup's rule (world size ÷ distance ÷ tan(fov/2), × `QualitySettings.lodBias`, `maximumLODLevel`; orthographic uses the ortho size). Enables only entries whose `Lod` matches; a level without colliders uses the closest more detailed level; culled keeps the lowest-detail colliders (physics runs off screen). Fed by the **Per LOD Colliders** setting: the pipeline collects every level of the target's LOD Group, tags shapes / entries (`ColliderEntry.Lod`, serialized +1 so pre-M6 data means "every LOD"), generation leaves only LOD 0's colliders enabled and adds the follower.
 
 ### 5.5 Scene editing (criterion 4)
 
@@ -469,7 +475,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M3** Decomposition ✅ | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
 | **M4** Scene editing ✅ | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
 | **M5** Paint & skinned ✅ | Paint mode (brush triangle select, grow / connected), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
-| **M6** Runtime | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
+| **M6** Runtime ✅ | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
 | **M7** Polish | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |
 
 ---

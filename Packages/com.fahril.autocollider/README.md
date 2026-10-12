@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> Status: 0.6.0 — milestones M1 (generation), M2 (optimization), M3 (convex decomposition + Auto), M4 (scene editing) and M5 (painted colliders + skinned meshes) done. Runtime collision events and animated colliders are next.
+> Status: 0.7.0 — milestones M1 (generation), M2 (optimization), M3 (convex decomposition + Auto), M4 (scene editing), M5 (painted colliders + skinned meshes) and M6 (runtime events, animated + LOD colliders) done. The Collider Doctor and the 1.0 polish are next.
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -46,6 +46,21 @@ Each painted area is saved as a **region** on the Collider Group, so *Regenerate
 
 ## Skinned meshes (characters)
 Generate on a character with **Auto** or **Per Bone**: every bone gets its own collider (a capsule by default), placed on a child of the bone so it follows the animation. The **Skinned Meshes** foldout sets the bone shape, the weight threshold, the minimum vertices per bone and **Symmetric Bones** (left / right pairs such as `Arm_L` / `Arm_R` get the same size).
+
+## Collision events in game code
+A **Collider Group** is one place to listen to all of an object's colliders — the event tells you which part was hit:
+
+```csharp
+var group = GetComponent<ColliderGroup>();
+group.CollisionEnter += (entry, collision) => Debug.Log($"{entry.Label} hit {collision.collider.name}");
+group.TriggerEnter  += (entry, other)     => Debug.Log($"{other.name} entered {entry.Label}");
+```
+
+It works with or without a Rigidbody (small relay components are added automatically the first time you subscribe, in play mode). There are also Stay / Exit events and bulk controls: `SetEnabled`, `SetTrigger`, `SetLayer`, `SetPhysicsMaterial`, `SetLayerOverrides`, `SetProvidesContacts`, `Where(...)`, `WorldBounds`.
+
+## Animated and LOD colliders
+- **Animated Mesh Collider** (`GameObject ▸ Auto Collider ▸ Add Animated Mesh Collider`): keeps a mesh collider in sync with an animated skinned mesh. Refreshes are throttled (every frame / every N frames / N times per second) and can skip frames where the mesh isn't visible. Per-bone colliders are much cheaper for characters — use this when the exact animated surface matters.
+- **Per LOD Colliders** (Generate ▸ Filters): fits colliders for every LOD level and adds a **Collider LOD Follower**, which enables only the active level's colliders at runtime — distant objects use their cheaper colliders.
 
 ## Optimizing existing mesh colliders
 **Window ▸ Optimize tab:** select objects (or choose *Whole Scene*), click **Analyze** to see triangles before → after, savings, accuracy and memory, turn on the **Error Heatmap** to see where the collider deviates, then **Optimize**. Optimized meshes are saved as assets and remember their original — **Restore Originals** puts it back.

@@ -13,6 +13,8 @@ namespace AutoCollider
         [SerializeField] private bool _generated;
         [SerializeField] private bool _locked;
         [SerializeField] private bool _ownsGameObject;
+        // Stored +1 so 0 (what entries serialized before this field deserialize to) means every LOD.
+        [SerializeField] private int _lodPlusOne;
 
         public ColliderEntry(Collider collider, string label, int partId, bool generated, bool ownsGameObject = false)
         {
@@ -59,6 +61,16 @@ namespace AutoCollider
 
         /// <summary>True when Auto Collider created this collider. Only generated colliders are ever removed by the tool.</summary>
         public bool Generated => _generated;
+
+        /// <summary>
+        /// LOD level this collider was fitted for (-1 = every LOD). A <see cref="ColliderLodFollower"/> enables only the
+        /// colliders of the active LOD.
+        /// </summary>
+        public int Lod
+        {
+            get => _lodPlusOne - 1;
+            set => _lodPlusOne = Mathf.Max(-1, value) + 1;
+        }
 
         /// <summary>Locked entries survive regenerate and remove operations.</summary>
         public bool Locked

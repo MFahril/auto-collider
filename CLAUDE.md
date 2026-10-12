@@ -21,7 +21,7 @@ Before starting work, check the current milestone in `ROADMAP.md`. When finishin
 | Distribution | **UPM package** at `Packages/com.fahril.autocollider/` |
 | Runtime namespace / asmdef | `AutoCollider` / `AutoCollider.Runtime` |
 | Editor namespace / asmdef | `AutoCollider.Editor` / `AutoCollider.Editor` |
-| Tests asmdef | `AutoCollider.Editor.Tests` (EditMode) |
+| Tests asmdefs | `AutoCollider.Editor.Tests` (EditMode), `AutoCollider.Tests` (PlayMode, runtime components) |
 | Math / jobs | `Unity.Mathematics` (an **engine module** in 6000.6 — no package or asmdef reference needed), `Unity.Collections` 6.6.0 + `Unity.Burst` 2.0.0 (built-in packages, declared in `package.json`, referenced by name in the Editor asmdef) |
 | Settings | `AutoColliderSettings` (`ScriptableSingleton`) → `ProjectSettings/AutoColliderSettings.asset`; defaults = field initializers in `AutoColliderSettingsData` |
 | UI | **UI Toolkit** (UXML + USS) for inspectors and windows, **Overlays** for scene toolbars, IMGUI `Handles` **only** for in-scene gizmos |
@@ -36,9 +36,9 @@ Packages/com.fahril.autocollider/
     ColliderGroup.cs           multi-collider "bridge" (ownership, bulk API, events)
     ColliderEntry.cs, GenerationRecipe.cs, GenerationSettings.cs (+ strategy/granularity/replace enums), PhysicsLimits.cs
     PaintedRegion.cs, PartShape.cs  painted parts stored in the recipe (ids ≥ 10000 = entry PartId)
-    ColliderRelay.cs           forwards callbacks from child collider GOs to the group
-    AnimatedMeshCollider.cs    runtime skinned/blendshape collider refresh
-    ColliderLodFollower.cs
+    ColliderRelay.cs (+ ColliderStayRelay, TriggerPairs)  routes physics messages to the group (added at runtime on first event subscription)
+    AnimatedMeshCollider.cs (+ RefreshSchedule)  runtime skinned/blendshape collider refresh, throttled
+    ColliderLodFollower.cs (+ LodMath)  enables the active LOD level's colliders
   Editor/                      AutoCollider.Editor
     PackagePaths.cs            every hard-coded asset path (package root, USS, settings asset)
     AutoColliderSettings.cs    project settings singleton + AutoColliderSettingsData
@@ -54,6 +54,7 @@ Packages/com.fahril.autocollider/
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
     Doctor/                    scene validator
   Tests/Editor/                EditMode tests
+  Tests/Runtime/               PlayMode tests (physics events, throttling, LOD)
   Samples~/Demo/               demo scene + models
   Documentation~/              user manual
 Docs/ARCHITECTURE_PLAN.md      design (dev-facing)
@@ -126,7 +127,7 @@ Use this when designing fitters, writers, and validators.
 - Negative scale: primitives handle it; MeshColliders get re-cooked (cost) — flag it in the Doctor.
 
 **Compound colliders & callbacks**
-- All colliders under one `Rigidbody` form a compound body. `OnCollision*` / `OnTrigger*` go to the **Rigidbody's GameObject**; identify the part via `Collision.GetContact(i).thisCollider`.
+- All colliders under one `Rigidbody` form a compound body. `OnCollision*` / `OnTrigger*` go to the **Rigidbody's GameObject**; identify the part via `Collision.thisCollider` (works on Exit too, which has no contacts). Child trigger messages also reach the Rigidbody's object, and `OnTrigger*` doesn't say which of several colliders on one object was involved (see `TriggerPairs`).
 - Without a Rigidbody, callbacks go to the **collider's own GameObject** → `ColliderRelay` forwards them to `ColliderGroup`.
 - Child GameObjects holding colliders must keep the root's layer unless the user overrides; `includeLayers`/`excludeLayers` and `layerOverridePriority` are per collider.
 
@@ -170,7 +171,8 @@ Use this when designing fitters, writers, and validators.
 1. Read the current milestone in `Docs/ROADMAP.md` before coding. Work one milestone slice at a time; tick tasks there only when compile + tests are green.
 2. After code changes, verify through **Unity-MCP**:
    - `refresh_unity` (compile) → `read_console` → **zero errors, zero new warnings** (the MCP bridge's own "WebSocket" reconnect warnings during domain reload are not ours).
-   - `run_tests` (EditMode, assembly `AutoCollider.Editor.Tests`) → all green.
+   - `run_tests` (EditMode, assembly `AutoCollider.Editor.Tests`) → all green; when `Runtime/` changed, also `run_tests` (PlayMode, assembly `AutoCollider.Tests`, `init_timeout` 120000).
+   - Runtime components without `[ExecuteAlways]` get no `OnEnable` / `OnDestroy` / `LateUpdate` in edit mode — don't rely on them in EditMode tests (test lifecycle in PlayMode).
    - For UI/scene features, exercise them in `Assets/AutoCollider Dev/M1 Test Scene.unity` (primitive props: table, tilted chair, squashed / scaled objects; dense `Rock` mesh with and without a MeshCollider for optimization; concave `Arch (static)` and `Bracket (Rigidbody)` for Auto / decomposition) via `execute_code` / `manage_scene`, and screenshot with `manage_camera` (`capture_source: scene_view`). Leave the scene clean (no generated colliders, original meshes on colliders), delete generated test meshes (`Assets/AutoCollider/`), and reopen the user's scene afterwards.
    - `execute_code` compiles as **C# 6** (CodeDom): no local functions / pattern matching — use `System.Func` lambdas. Set `Selection` in one call and drive the UI in the next (selection events fire between calls). Find UI controls by label/class, never "first FloatField" — bound PropertyFields contain FloatFields too and you would edit the user's settings.
 3. Required tests per area:

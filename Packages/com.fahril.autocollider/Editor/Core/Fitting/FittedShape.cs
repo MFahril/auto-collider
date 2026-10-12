@@ -62,6 +62,9 @@ namespace AutoCollider.Editor
         /// <summary>The painted region this shape was built from (its entry's PartId), or -1.</summary>
         public int RegionId = -1;
 
+        /// <summary>LOD level the shape was fitted for (per-LOD generation), or -1 for every LOD.</summary>
+        public int Lod = -1;
+
         public bool IsRotated => !GeometryUtils.IsNearIdentity(Rotation);
 
         public bool IsMesh => Kind == ShapeKind.ConvexMesh || Kind == ShapeKind.ConcaveMesh;

@@ -354,6 +354,46 @@ namespace AutoCollider.Editor
         public const string EditTabShortcutList =
             "1 / 2  Select / Edit mode\nW / E / R  Move / Rotate / Resize\nV (hold)  Snap to vertex\nCtrl+D  Duplicate   Del  Delete\nM  Mirror X   G  Merge (convex)\nL  Lock   H  Solo   Shift+H Hide   Alt+H Show all\nX  X-ray   F  Frame   Esc  Clear / exit\nRebind in Edit ▸ Shortcuts ▸ Auto Collider.";
 
+        // Runtime bridge (M6)
+        public const string SectionRuntime = "Runtime";
+        public const string RuntimeEventsHint =
+            "Game code can listen to every collider of this group at once:\n" +
+            "group.CollisionEnter += (entry, collision) => …\n" +
+            "group.TriggerEnter += (entry, other) => …\n" +
+            "The entry tells you which part was hit (entry.Label). Works with or without a Rigidbody; relays are added automatically in play mode.";
+        public const string AddLodFollower = "Add LOD Follower";
+        public const string AddLodFollowerTooltip = "Add a Collider LOD Follower: at runtime only the colliders generated for the active LOD level are enabled (generate with Per LOD Colliders).";
+        public const string UndoAddLodFollower = "Auto Collider: Add LOD Follower";
+        public const string EntryKindLod = "{0} · LOD{1}";
+        public const string BulkIncludeLayers = "Include Layers";
+        public const string BulkIncludeLayersTooltip = "Extra layers these colliders collide with, on top of the Layer Collision Matrix.";
+        public const string BulkExcludeLayers = "Exclude Layers";
+        public const string BulkExcludeLayersTooltip = "Layers these colliders ignore, on top of the Layer Collision Matrix.";
+        public const string BulkLayerPriority = "Override Priority";
+        public const string BulkLayerPriorityTooltip = "When two colliders' include / exclude layers disagree, the higher priority wins.";
+        public const string BulkLayerOverridesTooltip = "Apply include / exclude layers and priority to every collider in the group.";
+        public const string BulkContactsOn = "Provide Contacts";
+        public const string BulkContactsOff = "No Contacts";
+        public const string BulkContactsTooltip = "Report (or stop reporting) contacts of every collider to Physics.ContactEvent.";
+
+        // Animated mesh collider
+        public const string AddAnimatedCollider = "Add Animated Mesh Collider";
+        public const string UndoAddAnimatedCollider = "Auto Collider: Add Animated Mesh Collider";
+        public const string NotifyAnimatedAdded = "Animated Mesh Collider added to {0} object(s).";
+        public const string NotifyNoSkinned = "Select objects with a Skinned Mesh Renderer.";
+        public const string AnimatedMissing = "Assign a Skinned Mesh Renderer (Source) and a Mesh Collider (Target).";
+        public const string AnimatedConcaveDynamic = "The target is a concave Mesh Collider under a moving (non-kinematic) Rigidbody — PhysX doesn't allow that. Make it convex or the Rigidbody kinematic.";
+        public const string AnimatedMakeConvex = "Make Convex";
+        public const string AnimatedMakeConvexTooltip = "Set Convex on the target Mesh Collider (cheaper to cook, works with moving Rigidbodies, loses concave detail).";
+        public const string AnimatedNotReadable = "Shared Mesh mode assigns the mesh at runtime, which needs Read/Write enabled on '{0}'.";
+        public const string AnimatedEnableReadWrite = "Enable Read/Write";
+        public const string AnimatedEnableReadWriteTooltip = "Turn on Read/Write in the model's import settings and reimport it.";
+        public const string AnimatedCost = "≈ {0:N0} triangles re-cooked {1} — keep this low; per-bone primitive colliders are usually far cheaper.";
+        public const string AnimatedCostPerFrame = "every frame";
+        public const string AnimatedCostPerNFrames = "every {0} frames";
+        public const string AnimatedCostHz = "{0:0.#} times per second";
+        public const string AnimatedSharedHint = "Shared Mesh: the collider uses the bind pose and is only refreshed when the mesh is swapped (no per-frame cost).";
+
         // Collider kinds
         public const string KindBox = "Box";
         public const string KindSphere = "Sphere";

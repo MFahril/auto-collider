@@ -28,6 +28,9 @@ namespace AutoCollider
         [Tooltip("With a LODGroup, only use LOD 0 renderers.")]
         public bool Lod0Only = true;
 
+        [Tooltip("With a LODGroup, fit colliders for every LOD level and add a Collider LOD Follower that enables only the active level's colliders at runtime (overrides LOD 0 Only).")]
+        public bool PerLodColliders;
+
         [Tooltip("Skip renderers whose largest world-space size is below this value (0 = keep all).")]
         [Min(0f)]
         public float MinSize;

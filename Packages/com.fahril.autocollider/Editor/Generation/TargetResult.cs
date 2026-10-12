@@ -33,6 +33,9 @@ namespace AutoCollider.Editor
         public int CollidersCreated { get; set; }
         public int CollidersRemoved { get; set; }
 
+        /// <summary>LOD Group the shapes were fitted per level for (per-LOD generation), else null.</summary>
+        public LODGroup LodGroup { get; set; }
+
         /// <summary>Accumulated statistics of mesh shapes (a field so <see cref="ColliderStats.Add"/> mutates in place).</summary>
         public ColliderStats Stats;
 

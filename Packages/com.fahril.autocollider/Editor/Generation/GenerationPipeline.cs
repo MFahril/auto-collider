@@ -37,8 +37,19 @@ namespace AutoCollider.Editor
                 return result;
             }
 
+            // Per-LOD colliders: collect every level of one LOD Group and remember each renderer's level.
+            var lodGroup = settings.PerLodColliders ? target.GetComponentInChildren<LODGroup>(true) : null;
+            var collectSettings = settings;
+            if (lodGroup != null)
+            {
+                collectSettings = settings.Clone();
+                collectSettings.Lod0Only = false;
+            }
+
             var warnings = new List<string>();
-            var renderers = MeshSource.CollectRenderers(target, settings, warnings);
+            var renderers = MeshSource.CollectRenderers(target, collectSettings, warnings);
+            var lodOf = lodGroup != null ? LodLevels(target, lodGroup, renderers) : null;
+            if (lodOf != null && lodOf.Count > 0) result.LodGroup = lodGroup;
             foreach (var w in warnings) result.Warn(w);
             result.RendererCount = renderers.Count;
             if (renderers.Count == 0)
@@ -61,14 +72,23 @@ namespace AutoCollider.Editor
             var strategy = StrategyRegistry.Get(strategyKind == ColliderStrategy.PerBone ? ColliderStrategy.Auto : strategyKind, settings);
 
             var parts = new List<MeshGeometry>(renderers.Count);
+            var partLods = new List<int>(renderers.Count);
             foreach (var renderer in renderers)
             {
-                if (perBone && renderer is SkinnedMeshRenderer skinned && TryFitBones(skinned, settings, result)) continue;
+                var lod = lodOf != null && lodOf.TryGetValue(renderer, out var level) ? level : -1;
+                var before = result.Shapes.Count;
+                if (perBone && renderer is SkinnedMeshRenderer skinned && TryFitBones(skinned, settings, result))
+                {
+                    for (var s = before; s < result.Shapes.Count; s++) result.Shapes[s].Lod = lod;
+                    continue;
+                }
                 try
                 {
                     var geometry = MeshSource.Read(renderer, space);
                     result.SourceTriangles += geometry.TriangleCount;
-                    if (geometry.Vertices.Length > 0) parts.Add(geometry);
+                    if (geometry.Vertices.Length == 0) continue;
+                    parts.Add(geometry);
+                    partLods.Add(lod);
                 }
                 catch (Exception e)
                 {
@@ -76,16 +96,17 @@ namespace AutoCollider.Editor
                 }
             }
 
-            if (settings.Granularity == MeshGranularity.Combined && parts.Count > 1)
-                parts = new List<MeshGeometry> { MeshGeometry.Combine(target.name, parts) };
+            if (settings.Granularity == MeshGranularity.Combined && parts.Count > 1) CombinePerLod(target.name, parts, partLods);
 
-            foreach (var part in parts)
+            for (var p = 0; p < parts.Count; p++)
             {
+                var part = parts[p];
                 var shapes = strategy.Fit(FitInput.Create(part), context);
                 for (var i = 0; i < shapes.Count; i++)
                 {
                     var shape = shapes[i];
                     shape.Label = shapes.Count == 1 ? part.Label : $"{part.Label} {i + 1}";
+                    shape.Lod = partLods[p];
 
                     // The optimized-mesh path inflates inside the optimizer; everything else is inflated here.
                     if (shape.Kind != ShapeKind.ConcaveMesh) InflateDeflate.Apply(shape, settings.Inflate);
@@ -187,6 +208,56 @@ namespace AutoCollider.Editor
             result.SourceTriangles += mesh.triangles.Length / 3;
             result.Notes.Add(string.Format(Strings.NoteBones, skinned.name, named.Count));
             return true;
+        }
+
+        /// <summary>
+        /// LOD level of each renderer in <paramref name="lodGroup"/> (-1 when it is shared by several levels). Higher-LOD
+        /// renderers of other LOD Groups under the target are dropped from <paramref name="renderers"/>, as with LOD 0 Only.
+        /// </summary>
+        private static Dictionary<Renderer, int> LodLevels(GameObject target, LODGroup lodGroup, List<Renderer> renderers)
+        {
+            var levels = new Dictionary<Renderer, int>();
+            var lods = lodGroup.GetLODs();
+            for (var i = 0; i < lods.Length; i++)
+                foreach (var r in lods[i].renderers)
+                    if (r != null) levels[r] = levels.ContainsKey(r) && levels[r] != i ? -1 : i;
+
+            var otherHigherLods = new HashSet<Renderer>();
+            foreach (var other in target.GetComponentsInChildren<LODGroup>(true))
+            {
+                if (other == lodGroup) continue;
+                var otherLods = other.GetLODs();
+                for (var i = 1; i < otherLods.Length; i++)
+                    foreach (var r in otherLods[i].renderers)
+                        if (r != null && !System.Array.Exists(otherLods[0].renderers, x => x == r)) otherHigherLods.Add(r);
+            }
+            renderers.RemoveAll(otherHigherLods.Contains);
+
+            var result = new Dictionary<Renderer, int>();
+            foreach (var r in renderers)
+                if (levels.TryGetValue(r, out var level) && level >= 0) result[r] = level;
+            return result;
+        }
+
+        /// <summary>Combined granularity with per-LOD parts: one combined part per LOD level (and one for untagged parts).</summary>
+        private static void CombinePerLod(string name, List<MeshGeometry> parts, List<int> partLods)
+        {
+            var levels = new List<int>();
+            foreach (var lod in partLods)
+                if (!levels.Contains(lod)) levels.Add(lod);
+
+            var combined = new List<MeshGeometry>(levels.Count);
+            foreach (var lod in levels)
+            {
+                var subset = new List<MeshGeometry>();
+                for (var i = 0; i < parts.Count; i++)
+                    if (partLods[i] == lod) subset.Add(parts[i]);
+                combined.Add(MeshGeometry.Combine(lod < 0 || levels.Count == 1 ? name : $"{name} LOD{lod}", subset));
+            }
+            parts.Clear();
+            parts.AddRange(combined);
+            partLods.Clear();
+            partLods.AddRange(levels);
         }
 
         private static void MeasureMesh(FittedShape shape, MeshGeometry source)

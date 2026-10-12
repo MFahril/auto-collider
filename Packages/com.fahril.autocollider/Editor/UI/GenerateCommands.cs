@@ -40,6 +40,48 @@ namespace AutoCollider.Editor
         [MenuItem(GameObjectMenu + "Paint Colliders", true)]
         private static bool ValidatePaintMenu() => HasSceneSelection();
 
+        [MenuItem(GameObjectMenu + Strings.AddAnimatedCollider, false, 60)]
+        private static void AnimatedMenu(MenuCommand command)
+        {
+            if (IsRepeatedContextInvocation(command)) return;
+            var added = AddAnimatedColliders(Selection.gameObjects);
+            Notify(added > 0 ? string.Format(Strings.NotifyAnimatedAdded, added) : Strings.NotifyNoSkinned);
+        }
+
+        [MenuItem(GameObjectMenu + Strings.AddAnimatedCollider, true)]
+        private static bool ValidateAnimatedMenu() => HasSceneSelection();
+
+        /// <summary>
+        /// Add a Mesh Collider + <see cref="AnimatedMeshCollider"/> to every object with a Skinned Mesh Renderer (one Undo step).
+        /// The collider is convex under a moving Rigidbody (PhysX rejects concave ones there).
+        /// </summary>
+        public static int AddAnimatedColliders(IEnumerable<GameObject> objects)
+        {
+            Undo.IncrementCurrentGroup();
+            var undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName(Strings.UndoAddAnimatedCollider);
+
+            var added = 0;
+            foreach (var go in objects)
+            {
+                if (go == null || EditorUtility.IsPersistent(go) || !go.TryGetComponent<SkinnedMeshRenderer>(out var skinned)) continue;
+                if (go.TryGetComponent<AnimatedMeshCollider>(out _)) continue;
+
+                if (!go.TryGetComponent<MeshCollider>(out var meshCollider))
+                {
+                    meshCollider = Undo.AddComponent<MeshCollider>(go);
+                    meshCollider.sharedMesh = skinned.sharedMesh;
+                    meshCollider.convex = GenerationPipeline.IsDynamic(go);
+                }
+                var animated = Undo.AddComponent<AnimatedMeshCollider>(go);
+                animated.Source = skinned;
+                animated.Target = meshCollider;
+                added++;
+            }
+            Undo.CollapseUndoOperations(undoGroup);
+            return added;
+        }
+
         [Shortcut(Strings.ShortcutCategory + "/Generate Colliders for Selection", KeyCode.C, ShortcutModifiers.Shift | ShortcutModifiers.Alt)]
         public static void GenerateForSelection()
         {

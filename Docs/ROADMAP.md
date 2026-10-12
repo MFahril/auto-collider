@@ -21,7 +21,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M3 | Convex decomposition | 2 | ✅ |
 | M4 | Scene editing | 4 | ✅ |
 | M5 | Paint & skinned | 4 | ✅ |
-| M6 | Runtime bridge features | 5 | ⬜ |
+| M6 | Runtime bridge features | 5 | ✅ |
 | M7 | Polish & release | 1 | ⬜ |
 
 Criteria: 1 clean UI · 2 optimize · 3 multi-object · 4 scene editing · 5 multi-collider bridge.
@@ -168,15 +168,15 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M6 — Runtime bridge features ⬜
+## M6 — Runtime bridge features ✅
 
-- [ ] `ColliderGroup` events (Collision/Trigger Enter/Stay/Exit with entry) + `ColliderRelay`
-- [ ] Bulk API: layer overrides (include/exclude/priority), provides contacts, `Where` filter, world bounds
-- [ ] `AnimatedMeshCollider` (BakeMesh/SharedMesh, EveryFrame/EveryNFrames/TargetHz, only-when-visible)
-- [ ] `ColliderLodFollower`
-- [ ] PlayMode tests: events report correct entry; throttling respected
+- [x] `ColliderGroup` events `CollisionEnter/Stay/Exit (entry, Collision)` and `TriggerEnter/Stay/Exit (entry, other)`; routing starts on the first subscription (play mode): `ColliderRelay` on each object that receives messages (collider objects + their Rigidbody objects), `ColliderStayRelay` only when a Stay event is used (Unity calls Stay every step). Collisions resolve the part exactly via `Collision.thisCollider` and accept only the canonical receiver (Rigidbody object, else the collider's own object) → no double reports; triggers resolve the part by overlap (`TriggerPairs`: penetration test on Enter, remembered per other collider until Exit). `RefreshRouting()` for colliders added at runtime
+- [x] Bulk API: `SetLayerOverrides(include, exclude, priority)`, `SetProvidesContacts`, plus existing enable / trigger / layer / material / `Where` / `WorldBounds`; `TryGetEntry` uses a dictionary (rebuilt after Undo / re-pointing). Inspector: Bulk Edit gets layer overrides + contacts, new *Runtime* foldout (events how-to, Add LOD Follower), LOD tag per row; every Apply button tooltipped
+- [x] `AnimatedMeshCollider` (Bake Mesh / Shared Mesh; Every Frame / Every N Frames / Target Hz via pure `RefreshSchedule`; only when visible; target on another transform is handled; baked mesh owned + destroyed, original mesh restored). `GameObject ▸ Auto Collider ▸ Add Animated Mesh Collider` (convex under moving Rigidbodies, one Undo). UI Toolkit inspector: missing refs, concave-on-dynamic (Make Convex), Shared Mesh needs Read/Write (Enable Read/Write), cost estimate
+- [x] `ColliderLodFollower` + `LodMath` (LODGroup's screen-relative height × LOD bias, maximum LOD level, culled → lowest-detail colliders); levels without colliders fall back to the closest more detailed level. Generation option **Per LOD Colliders**: fits every level of the LOD Group, tags entries (`ColliderEntry.Lod`, stored +1 so old data means "every LOD"), starts with LOD 0's colliders on, adds the follower
+- [x] Tests: PlayMode assembly `AutoCollider.Tests` (8): collision part on a shared container without Rigidbody (+ exit), Rigidbody compound reports the lower foot first and never twice per step, trigger part by overlap (enter / switch / exit), Stay relay only when subscribed, Target Hz and Every N Frames throttling, collider follows the skinned pose + original mesh restored, only-when-visible, LOD follower near / far / culled. EditMode (11): schedule rules, LOD math + bias, per-LOD generation + undo, LOD 0 Only default, combined per level, fallback level, entry LOD default, lookup after re-point / undo, bulk overrides, Add Animated (convex when dynamic, one undo), bake follows the pose
 
-**Done when:** play-mode tests green; events fire with correct entry; animated collider throttles per settings.
+**Done when:** play-mode tests green; events fire with correct entry; animated collider throttles per settings. → *Verified 2026-10-12: 145/145 EditMode + 8/8 PlayMode tests, console clean. Live on the dev scene: inspector shows Bulk Edit / Runtime / Recipe with every button tooltipped; Per LOD Colliders on a two-level LOD object → LOD 0 box (on) + LOD 1 sphere (off) + follower; Add Animated Mesh Collider + its inspector build without errors.*
 
 ---
 
@@ -223,3 +223,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M3 ✅ | Burst voxelizer, convex decomposition with greedy concavity merge, primitive replacement, Auto strategy (default), 100 tests green; package 0.4.0 |
 | 2026-10-12 | M4 ✅ | Collider edit tool + overlay, picking, handles, vertex snap, 10 operations (one Undo each), shortcuts, inspector sync; fixed Undo record ordering; 121 tests green; package 0.5.0 |
 | 2026-10-12 | M5 ✅ | Paint mode (brush, grow / connected, regions stored in the recipe, identical regenerate), per-bone colliders for skinned meshes (follow animation, L/R symmetry), Auto → per bone on skinned; 134 tests green; package 0.6.0 |
+| 2026-10-12 | M6 ✅ | Group collision / trigger events with the hit part (relays, no double reports), bulk layer overrides + contacts, Animated Mesh Collider (throttled), per-LOD colliders + LOD follower; 145 EditMode + 8 PlayMode tests green; package 0.7.0 |

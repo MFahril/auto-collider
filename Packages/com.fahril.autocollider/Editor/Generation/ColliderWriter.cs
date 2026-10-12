@@ -58,9 +58,11 @@ namespace AutoCollider.Editor
 
                 if (!(collider is MeshCollider { convex: false })) collider.isTrigger = settings.IsTrigger;
                 collider.sharedMaterial = settings.Material;
+                // Per-LOD colliders start as LOD 0 shows; the LOD follower switches them at runtime.
+                if (shape.Lod > 0) collider.enabled = false;
                 RecordGroup(group, Strings.UndoGenerate);
                 var partId = shape.RegionId >= 0 ? shape.RegionId : i;
-                group.AddEntry(new ColliderEntry(collider, shape.Label, partId, generated: true, OwnsHost(collider, group)));
+                group.AddEntry(new ColliderEntry(collider, shape.Label, partId, generated: true, OwnsHost(collider, group)) { Lod = shape.Lod });
                 result.CollidersCreated++;
             }
 
@@ -69,6 +71,18 @@ namespace AutoCollider.Editor
             EditorUtility.SetDirty(group);
             if (PrefabUtility.IsPartOfPrefabInstance(group))
                 PrefabUtility.RecordPrefabInstancePropertyModifications(group);
+
+            if (result.LodGroup != null) EnsureLodFollower(group, result.LodGroup);
+        }
+
+        private static void EnsureLodFollower(ColliderGroup group, LODGroup lodGroup)
+        {
+            if (!group.TryGetComponent<ColliderLodFollower>(out var follower))
+                follower = Undo.AddComponent<ColliderLodFollower>(group.gameObject);
+            Undo.RecordObject(follower, Strings.UndoGenerate);
+            follower.LodGroup = lodGroup;
+            if (PrefabUtility.IsPartOfPrefabInstance(follower))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(follower);
         }
 
         /// <summary>

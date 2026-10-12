@@ -6,15 +6,24 @@ namespace AutoCollider
 {
     /// <summary>
     /// The multi-collider "bridge": owns every collider generated for this object and controls them as one unit.
-    /// Game code talks to the group instead of to individual colliders.
+    /// Game code talks to the group instead of to individual colliders — including collision and trigger events,
+    /// which report the <see cref="ColliderEntry"/> (part) that was hit.
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("Physics/Auto Collider/Collider Group")]
-    public sealed class ColliderGroup : MonoBehaviour
+    public sealed class ColliderGroup : MonoBehaviour, ISerializationCallbackReceiver
     {
         [SerializeField] private List<ColliderEntry> _entries = new();
         [SerializeField] private Transform _container;
         [SerializeField] private GenerationRecipe _recipe = new();
+
+        private Dictionary<Collider, ColliderEntry> _lookup;
+        private TriggerPairs _triggerPairs;
+        private bool _routing;
+        private bool _stayRouting;
+
+        private Action<ColliderEntry, Collision> _collisionEnter, _collisionStay, _collisionExit;
+        private Action<ColliderEntry, Collider> _triggerEnter, _triggerStay, _triggerExit;
 
         /// <summary>All tracked colliders (generated and manually registered).</summary>
         public IReadOnlyList<ColliderEntry> Entries => _entries;
@@ -60,19 +69,151 @@ namespace AutoCollider
             }
         }
 
+        // ---------- Events ----------
+
+        /// <summary>
+        /// One of the group's colliders started touching another collider. Reports the entry that was hit; works with or
+        /// without a Rigidbody (messages are routed through <see cref="ColliderRelay"/> components added at runtime on first subscription).
+        /// </summary>
+        public event Action<ColliderEntry, Collision> CollisionEnter
+        {
+            add { _collisionEnter += value; EnsureRouting(false); }
+            remove => _collisionEnter -= value;
+        }
+
+        /// <summary>Called every physics step while one of the group's colliders keeps touching another collider.</summary>
+        public event Action<ColliderEntry, Collision> CollisionStay
+        {
+            add { _collisionStay += value; EnsureRouting(true); }
+            remove => _collisionStay -= value;
+        }
+
+        /// <summary>One of the group's colliders stopped touching another collider.</summary>
+        public event Action<ColliderEntry, Collision> CollisionExit
+        {
+            add { _collisionExit += value; EnsureRouting(false); }
+            remove => _collisionExit -= value;
+        }
+
+        /// <summary>
+        /// A collider entered one of the group's triggers (or one of the group's colliders entered a trigger).
+        /// The second argument is the other collider. Unity's trigger messages don't say which of several colliders on the
+        /// same object was involved; the group resolves it by overlap.
+        /// </summary>
+        public event Action<ColliderEntry, Collider> TriggerEnter
+        {
+            add { _triggerEnter += value; EnsureRouting(false); }
+            remove => _triggerEnter -= value;
+        }
+
+        /// <summary>Called every physics step while a trigger overlap involving one of the group's colliders lasts.</summary>
+        public event Action<ColliderEntry, Collider> TriggerStay
+        {
+            add { _triggerStay += value; EnsureRouting(true); }
+            remove => _triggerStay -= value;
+        }
+
+        /// <summary>A trigger overlap involving one of the group's colliders ended.</summary>
+        public event Action<ColliderEntry, Collider> TriggerExit
+        {
+            add { _triggerExit += value; EnsureRouting(false); }
+            remove => _triggerExit -= value;
+        }
+
+        /// <summary>
+        /// Add relays to the objects that receive physics messages for the tracked colliders (play mode only).
+        /// Called automatically when an event gets its first subscriber; call it again after adding colliders at runtime.
+        /// </summary>
+        public void RefreshRouting()
+        {
+            if (!_routing || !Application.isPlaying) return;
+            foreach (var entry in _entries)
+            {
+                var c = entry.Collider;
+                if (c == null) continue;
+                AddRelay(c.gameObject);
+                var body = c.attachedRigidbody;
+                if (body != null) AddRelay(body.gameObject);
+            }
+        }
+
+        private void EnsureRouting(bool stay)
+        {
+            var changed = !_routing || (stay && !_stayRouting);
+            _routing = true;
+            _stayRouting |= stay;
+            if (changed) RefreshRouting();
+        }
+
+        private void AddRelay(GameObject host)
+        {
+            if (!host.TryGetComponent<ColliderRelay>(out var relay)) relay = host.AddComponent<ColliderRelay>();
+            relay.Register(this);
+            if (_stayRouting && !host.TryGetComponent<ColliderStayRelay>(out _)) host.AddComponent<ColliderStayRelay>();
+        }
+
+        internal void OnRelayCollision(GameObject receiver, Collision collision, RelayPhase phase)
+        {
+            var mine = collision.thisCollider;
+            if (mine == null || !TryGetEntry(mine, out var entry)) return;
+
+            // Unity sends collision messages to the Rigidbody's object (and to the collider's own object without one);
+            // accepting only that receiver keeps every contact from being reported twice.
+            var body = mine.attachedRigidbody;
+            if (receiver != (body != null ? body.gameObject : mine.gameObject)) return;
+
+            var handler = phase switch
+            {
+                RelayPhase.Enter => _collisionEnter,
+                RelayPhase.Stay => _collisionStay,
+                _ => _collisionExit,
+            };
+            handler?.Invoke(entry, collision);
+        }
+
+        internal void OnRelayTrigger(GameObject receiver, Collider other, RelayPhase phase)
+        {
+            if (other == null) return;
+            _triggerPairs ??= new TriggerPairs();
+            var entry = phase switch
+            {
+                RelayPhase.Enter => _triggerPairs.Enter(this, receiver, other),
+                RelayPhase.Stay => _triggerPairs.Stay(receiver, other),
+                _ => _triggerPairs.Exit(receiver, other),
+            };
+            if (entry == null) return;
+
+            var handler = phase switch
+            {
+                RelayPhase.Enter => _triggerEnter,
+                RelayPhase.Stay => _triggerStay,
+                _ => _triggerExit,
+            };
+            handler?.Invoke(entry, other);
+        }
+
+        // ---------- Queries ----------
+
         /// <summary>Find the entry that tracks <paramref name="collider"/>.</summary>
         public bool TryGetEntry(Collider collider, out ColliderEntry entry)
         {
-            foreach (var e in _entries)
-            {
-                if (e.Collider == collider && collider != null)
-                {
-                    entry = e;
-                    return true;
-                }
-            }
             entry = null;
-            return false;
+            if (collider == null) return false;
+
+            _lookup ??= BuildLookup();
+            if (_lookup.TryGetValue(collider, out entry) && entry.Collider == collider) return true;
+
+            // Entries can be re-pointed (edit tool) — rebuild once before giving up.
+            _lookup = BuildLookup();
+            return _lookup.TryGetValue(collider, out entry);
+        }
+
+        private Dictionary<Collider, ColliderEntry> BuildLookup()
+        {
+            var lookup = new Dictionary<Collider, ColliderEntry>(_entries.Count);
+            foreach (var e in _entries)
+                if (e.Collider != null) lookup[e.Collider] = e;
+            return lookup;
         }
 
         /// <summary>Entries matching a predicate (live colliders only).</summary>
@@ -82,6 +223,8 @@ namespace AutoCollider
                 if (e.Collider != null && predicate(e))
                     yield return e;
         }
+
+        // ---------- Bulk control ----------
 
         /// <summary>Enable or disable every tracked collider.</summary>
         public void SetEnabled(bool enabled)
@@ -121,11 +264,55 @@ namespace AutoCollider
             }
         }
 
-        internal void AddEntry(ColliderEntry entry) => _entries.Add(entry);
+        /// <summary>
+        /// Per-collider layer overrides on every tracked collider: extra layers to collide with (<paramref name="include"/>),
+        /// layers to ignore (<paramref name="exclude"/>) and the priority that decides conflicts with the other collider's overrides.
+        /// </summary>
+        public void SetLayerOverrides(LayerMask include, LayerMask exclude, int priority)
+        {
+            foreach (var e in _entries)
+            {
+                var c = e.Collider;
+                if (c == null) continue;
+                c.includeLayers = include;
+                c.excludeLayers = exclude;
+                c.layerOverridePriority = priority;
+            }
+        }
 
-        internal bool RemoveEntry(ColliderEntry entry) => _entries.Remove(entry);
+        /// <summary>Turn contact reporting for <c>Physics.ContactEvent</c> on or off for every tracked collider.</summary>
+        public void SetProvidesContacts(bool providesContacts)
+        {
+            foreach (var e in _entries)
+                if (e.Collider != null) e.Collider.providesContacts = providesContacts;
+        }
+
+        // ---------- Entry management (editor) ----------
+
+        internal void AddEntry(ColliderEntry entry)
+        {
+            _entries.Add(entry);
+            _lookup = null;
+        }
+
+        internal bool RemoveEntry(ColliderEntry entry)
+        {
+            _lookup = null;
+            return _entries.Remove(entry);
+        }
 
         /// <summary>Drop entries whose collider was deleted outside the tool. Returns the number removed.</summary>
-        internal int RemoveMissing() => _entries.RemoveAll(e => e.Collider == null);
+        internal int RemoveMissing()
+        {
+            _lookup = null;
+            return _entries.RemoveAll(e => e.Collider == null);
+        }
+
+        void ISerializationCallbackReceiver.OnBeforeSerialize()
+        {
+        }
+
+        // Undo / prefab reverts replace the entry objects.
+        void ISerializationCallbackReceiver.OnAfterDeserialize() => _lookup = null;
     }
 }

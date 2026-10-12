@@ -3,6 +3,18 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.7.0] - 2026-10-12
+
+### Added
+- **Collider Group events** (M6): `CollisionEnter / Stay / Exit (entry, collision)` and `TriggerEnter / Stay / Exit (entry, other)` report which part was hit — with or without a Rigidbody, each contact once. Relays are added automatically in play mode on the first subscription (Stay relays only when a Stay event is used); `RefreshRouting()` for colliders added at runtime.
+- Bulk API: `SetLayerOverrides(include, exclude, priority)` and `SetProvidesContacts`; inspector Bulk Edit gets both, plus a *Runtime* foldout and a LOD tag on each row.
+- **Animated Mesh Collider**: runtime mesh collider for skinned meshes — Bake Mesh / Shared Mesh, Every Frame / Every N Frames / Target Hz, only when visible. Menu `GameObject ▸ Auto Collider ▸ Add Animated Mesh Collider`; inspector with one-click fixes (Make Convex, Enable Read/Write) and a cost estimate.
+- **Per LOD Colliders** generation option and **Collider LOD Follower**: colliders for every LOD level, switched with the active level at runtime (LOD bias and maximum LOD level respected; culled objects keep their lowest-detail colliders).
+- PlayMode test assembly `AutoCollider.Tests`.
+
+### Changed
+- `ColliderGroup.TryGetEntry` is a dictionary lookup instead of a linear search.
+
 ## [0.6.0] - 2026-10-12
 
 ### Added

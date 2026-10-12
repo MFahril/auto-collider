@@ -22,6 +22,7 @@ namespace AutoCollider.Editor
         private ListView _list;
         private HelpBox _missingBox;
         private Button _clearRegions;
+        private Button _addLodFollower;
         private int _stateHash;
 
         private ColliderGroup Group => (ColliderGroup)target;
@@ -106,7 +107,21 @@ namespace AutoCollider.Editor
             bulk.Add(BulkTrigger());
             bulk.Add(BulkLayer());
             bulk.Add(BulkMaterial());
+            bulk.Add(BulkLayerOverrides());
+            bulk.Add(BulkContacts());
             root.Add(bulk);
+
+            // Runtime (events, LOD)
+            var runtime = new Foldout { text = Strings.SectionRuntime, value = false, viewDataKey = "AutoCollider.Group.Runtime" };
+            runtime.AddToClassList("ac-section");
+            runtime.AddToClassList("ac-foldout");
+            var eventsHint = new Label(Strings.RuntimeEventsHint);
+            eventsHint.AddToClassList("ac-hint");
+            runtime.Add(eventsHint);
+            _addLodFollower = new Button(AddLodFollower) { text = Strings.AddLodFollower, tooltip = Strings.AddLodFollowerTooltip };
+            _addLodFollower.AddToClassList("ac-button");
+            runtime.Add(_addLodFollower);
+            root.Add(runtime);
 
             // Recipe (read-only)
             var recipe = new Foldout { text = Strings.SectionRecipe, value = false, viewDataKey = "AutoCollider.Group.Recipe" };
@@ -175,6 +190,9 @@ namespace AutoCollider.Editor
             var regions = Group.Recipe.Regions.Count;
             _clearRegions.text = string.Format(Strings.ClearRegions, regions);
             _clearRegions.EnableInClassList("ac-hidden", regions == 0);
+
+            var canFollow = Groups.Any(g => !g.TryGetComponent<ColliderLodFollower>(out _) && g.GetComponentInChildren<LODGroup>(true) != null);
+            _addLodFollower.EnableInClassList("ac-hidden", !canFollow);
         }
 
         private int ComputeStateHash()
@@ -251,7 +269,8 @@ namespace AutoCollider.Editor
             var label = row.Q<Label>("label");
             label.text = string.IsNullOrEmpty(entry.Label) ? collider.gameObject.name : entry.Label;
             label.tooltip = entry.Generated ? Strings.EntryGeneratedTooltip : Strings.EntryManualTooltip;
-            row.Q<Label>("kind").text = ColliderCost.KindName(collider);
+            var kindText = ColliderCost.KindName(collider);
+            row.Q<Label>("kind").text = entry.Lod >= 0 ? string.Format(Strings.EntryKindLod, kindText, entry.Lod) : kindText;
 
             Rebind(row.Q<Toggle>("enabled"), collider.enabled, value =>
             {
@@ -348,7 +367,7 @@ namespace AutoCollider.Editor
             var layer = new LayerField(Strings.BulkLayer) { tooltip = Strings.BulkLayerTooltip };
             layer.AddToClassList("ac-row__grow");
             row.Add(layer);
-            var apply = new Button(() => ApplyLayer(layer.value)) { text = Strings.Apply };
+            var apply = new Button(() => ApplyLayer(layer.value)) { text = Strings.Apply, tooltip = Strings.BulkLayerTooltip };
             apply.AddToClassList("ac-button");
             row.Add(apply);
             return row;
@@ -361,10 +380,71 @@ namespace AutoCollider.Editor
             var material = new ObjectField(Strings.BulkMaterial) { objectType = typeof(PhysicsMaterial), tooltip = Strings.BulkMaterialTooltip };
             material.AddToClassList("ac-row__grow");
             row.Add(material);
-            var apply = new Button(() => ApplyToColliders(c => c.sharedMaterial = material.value as PhysicsMaterial)) { text = Strings.Apply };
+            var apply = new Button(() => ApplyToColliders(c => c.sharedMaterial = material.value as PhysicsMaterial))
+                { text = Strings.Apply, tooltip = Strings.BulkMaterialTooltip };
             apply.AddToClassList("ac-button");
             row.Add(apply);
             return row;
+        }
+
+        private VisualElement BulkLayerOverrides()
+        {
+            var box = new VisualElement();
+            var include = new LayerMaskField(Strings.BulkIncludeLayers) { tooltip = Strings.BulkIncludeLayersTooltip };
+            var exclude = new LayerMaskField(Strings.BulkExcludeLayers) { tooltip = Strings.BulkExcludeLayersTooltip };
+            var priority = new IntegerField(Strings.BulkLayerPriority) { tooltip = Strings.BulkLayerPriorityTooltip };
+            var first = Group.Entries.Select(e => e.Collider).FirstOrDefault(c => c != null);
+            if (first != null)
+            {
+                include.SetValueWithoutNotify(first.includeLayers);
+                exclude.SetValueWithoutNotify(first.excludeLayers);
+                priority.SetValueWithoutNotify(first.layerOverridePriority);
+            }
+            box.Add(include);
+            box.Add(exclude);
+            var row = new VisualElement();
+            row.AddToClassList("ac-row");
+            priority.AddToClassList("ac-row__grow");
+            row.Add(priority);
+            var apply = new Button(() => ApplyToColliders(c =>
+                {
+                    c.includeLayers = include.value;
+                    c.excludeLayers = exclude.value;
+                    c.layerOverridePriority = priority.value;
+                }))
+                { text = Strings.Apply, tooltip = Strings.BulkLayerOverridesTooltip };
+            apply.AddToClassList("ac-button");
+            row.Add(apply);
+            box.Add(row);
+            return box;
+        }
+
+        private VisualElement BulkContacts()
+        {
+            var row = new VisualElement();
+            row.AddToClassList("ac-row");
+            var on = new Button(() => ApplyToColliders(c => c.providesContacts = true)) { text = Strings.BulkContactsOn, tooltip = Strings.BulkContactsTooltip };
+            var off = new Button(() => ApplyToColliders(c => c.providesContacts = false)) { text = Strings.BulkContactsOff, tooltip = Strings.BulkContactsTooltip };
+            foreach (var b in new[] { on, off })
+            {
+                b.AddToClassList("ac-button");
+                row.Add(b);
+            }
+            return row;
+        }
+
+        private void AddLodFollower()
+        {
+            foreach (var group in Groups)
+            {
+                if (group.TryGetComponent<ColliderLodFollower>(out _)) continue;
+                var lodGroup = group.GetComponentInChildren<LODGroup>(true);
+                if (lodGroup == null) continue;
+                var follower = Undo.AddComponent<ColliderLodFollower>(group.gameObject);
+                Undo.RecordObject(follower, Strings.UndoAddLodFollower);
+                follower.LodGroup = lodGroup;
+            }
+            Refresh();
         }
 
         private void ApplyToColliders(System.Action<Collider> change)

@@ -104,6 +104,7 @@ namespace AutoCollider.Editor
             filters.Add(Field(settings, nameof(GenerationSettings.IncludeChildren)));
             filters.Add(Field(settings, nameof(GenerationSettings.IncludeInactive)));
             filters.Add(Field(settings, nameof(GenerationSettings.Lod0Only)));
+            filters.Add(Field(settings, nameof(GenerationSettings.PerLodColliders)));
             filters.Add(Field(settings, nameof(GenerationSettings.MinSize)));
             filters.Add(Field(settings, nameof(GenerationSettings.ExcludeNamePattern)));
 
