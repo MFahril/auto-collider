@@ -12,20 +12,19 @@ namespace AutoCollider.Editor.Tests
     {
         private const string Folder = "Assets/__AutoColliderOptimizeTests";
 
-        private HashSet<GameObject> _rootsBefore;
+        private TestScene _scene;
 
         [SetUp]
         public void SetUp()
         {
-            _rootsBefore = new HashSet<GameObject>(SceneManager.GetActiveScene().GetRootGameObjects());
+            _scene = new TestScene();
             GeneratedMeshStore.EnsureFolder(Folder);
         }
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-                if (!_rootsBefore.Contains(root)) Object.DestroyImmediate(root);
+            _scene.Cleanup();
             AssetDatabase.DeleteAsset(Folder);
         }
 

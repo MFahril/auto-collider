@@ -19,7 +19,7 @@ namespace AutoCollider.Editor
                 activateHandler = (_, root) => Build(root),
                 keywords = new HashSet<string>
                 {
-                    "collider", "physics", "convex", "mesh", "handle", "generated", "auto collider"
+                    "collider", "physics", "convex", "mesh", "handle", "generated", "auto collider", "doctor", "hierarchy", "badge"
                 }
             };
         }
@@ -64,6 +64,11 @@ namespace AutoCollider.Editor
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.LockAfterEdit)));
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.ShowLabels)));
             sceneView.Add(Field(data, nameof(AutoColliderSettingsData.FillOpacity)));
+
+            var doctor = Section(page, Strings.SectionDoctorHierarchy);
+            doctor.Add(Field(data, nameof(AutoColliderSettingsData.ShowHierarchyBadge)));
+            doctor.Add(Field(data, nameof(AutoColliderSettingsData.DoctorTriangleBudget)));
+            doctor.Add(Field(data, nameof(AutoColliderSettingsData.DoctorCheckMissingColliders)));
 
             var colors = Section(page, Strings.SectionColors);
             colors.Add(Field(data, nameof(AutoColliderSettingsData.BoxColor)));

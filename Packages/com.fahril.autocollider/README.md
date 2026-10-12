@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> Status: 0.7.0 — milestones M1 (generation), M2 (optimization), M3 (convex decomposition + Auto), M4 (scene editing), M5 (painted colliders + skinned meshes) and M6 (runtime events, animated + LOD colliders) done. The Collider Doctor and the 1.0 polish are next.
+> **1.0.0** — full user manual in [`Documentation~/index.md`](Documentation~/index.md); a Demo sample is available in the Package Manager (*Samples ▸ Demo*).
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -67,5 +67,8 @@ It works with or without a Rigidbody (small relay components are added automatic
 
 Tune with **Quality** (fewer ↔ more triangles), **Shape Fidelity** (keeps corners and edges), **Max Triangles**, **Inflate** and **Min Island Size** — or pick a preset (*High Quality, Balanced, Performance, Mobile*) and save your own as a `Collider Preset` asset to share with your team.
 
+## Collider Doctor
+**Tools ▸ Auto Collider ▸ Run Doctor** checks the selection or the open scenes for collider mistakes that break or slow down physics — concave colliders on moving Rigidbodies, over-detailed mesh colliders, missing meshes, duplicates, broken Collider Group entries and more — and fixes them in one click (each fix can be undone; *Fix All* is a single step).
+
 ## Settings
-`Project Settings ▸ Auto Collider` — generated mesh folder, container name, default preset, preview budget, handle size and colors.
+`Project Settings ▸ Auto Collider` — generated mesh folder, container name, default preset, preview budget, handle size, Hierarchy badge, Doctor budget and colors.

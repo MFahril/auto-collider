@@ -114,5 +114,28 @@ namespace AutoCollider.Editor.Tests
             Assert.That(PhysicsLimits.MaxConvexPolygons, Is.EqualTo(255));
             Assert.That(PhysicsLimits.MinHullVertices, Is.EqualTo(4));
         }
+
+        [Test]
+        public void DemoSample_IsRegistered_Complete_AndRuntimeOnly()
+        {
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(PackagePaths).Assembly);
+            var sample = System.IO.Path.Combine(info.resolvedPath, "Samples~", "Demo");
+
+            var manifest = System.IO.File.ReadAllText(System.IO.Path.Combine(info.resolvedPath, "package.json"));
+            Assert.That(manifest, Does.Contain("\"path\": \"Samples~/Demo\""));
+            Assert.That(System.IO.File.Exists(System.IO.Path.Combine(sample, "Auto Collider Demo.unity")));
+            Assert.That(System.IO.File.Exists(System.IO.Path.Combine(sample, "README.md")));
+
+            // Every asset ships with its .meta, so the scene's references survive the import.
+            foreach (var file in System.IO.Directory.GetFiles(sample, "*", System.IO.SearchOption.AllDirectories))
+            {
+                if (file.EndsWith(".meta") || file.EndsWith("README.md")) continue;
+                Assert.That(System.IO.File.Exists(file + ".meta"), file);
+            }
+
+            // Sample scripts compile into the player (Assembly-CSharp) — no editor API.
+            foreach (var script in System.IO.Directory.GetFiles(sample, "*.cs", System.IO.SearchOption.AllDirectories))
+                Assert.That(System.IO.File.ReadAllText(script), Does.Not.Contain("UnityEditor"), script);
+        }
     }
 }

@@ -41,6 +41,7 @@ namespace AutoCollider.Editor
             var undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName(string.Format(Strings.UndoGenerateCount, targets.Count));
 
+            using var fitCache = FitCache.Scope();
             try
             {
                 for (var i = 0; i < targets.Count; i++)

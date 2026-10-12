@@ -12,16 +12,15 @@ namespace AutoCollider.Editor.Tests
     public class RuntimeBridgeEditTests
     {
         private const string MeshFolder = "Assets/__AutoColliderBridgeTests";
-        private HashSet<GameObject> _rootsBefore;
+        private TestScene _scene;
 
         [SetUp]
-        public void SetUp() => _rootsBefore = new HashSet<GameObject>(SceneManager.GetActiveScene().GetRootGameObjects());
+        public void SetUp() => _scene = new TestScene();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-                if (!_rootsBefore.Contains(root)) Object.DestroyImmediate(root);
+            _scene.Cleanup();
             AssetDatabase.DeleteAsset(MeshFolder);
         }
 

@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M6 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M7 done — 1.0.0** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -150,7 +150,7 @@ Packages/com.fahril.autocollider/
 │  │                 PaintMode, SelectionOps (merge/mirror/convert/refit), Shortcuts
 │  ├─ UI/            AutoColliderWindow, GenerateTab, ColliderGroupEditor, GenerateCommands, ColliderCost,
 │  │                 StatsView, HeatmapDrawer, AutoColliderSettingsProvider, Strings, AutoColliderStyles, Uss/
-│  └─ Doctor/        ColliderDoctor, Checks/*
+│  └─ Doctor/        ColliderDoctor, DoctorIssue, DoctorCheck, DoctorSeverity
 ├─ Tests/Editor/ (AutoCollider.Editor.Tests.asmdef)
 ├─ Samples~/Demo/
 └─ Documentation~/
@@ -218,11 +218,11 @@ Dependencies flow downward only: UI/Editing → Generation → Optimization → 
 
 - **`MeshSource`** — collects renderers (filters: children, inactive, LOD0, min size, name regex; skips containers and nested groups) and reads them into `MeshGeometry` (`float3[]` vertices + `int[]` triangles) in the target's scaled space. Uses `Mesh.AcquireReadOnlyMeshData` (works on Read/Write-disabled meshes in the editor); skinned meshes are baked (`BakeMesh(useScale: true)`) and the temporary mesh destroyed. `MeshGeometry.Combine` merges parts.
 - **Fitters** (static classes in `Core/Fitting`; all enclosing, run on hull vertices):
-  - `BoxFitter`: `Aabb`, `Pca` (covariance eigenvectors), `MinVolume` (each hull face normal + 2D min-area rectangle, vs PCA/AABB). Axes canonicalized to the rotation closest to identity.
+  - `BoxFitter`: `Aabb`, `Pca` (covariance eigenvectors), `MinVolume` (hull face directions + 2D min-area rectangle, vs PCA/AABB; at most the 64 directions with the most hull area facing them — round hulls have hundreds of near-identical faces). Axes canonicalized to the rotation closest to identity.
   - `SphereFitter`: `Ritter` (fast), `Welzl` (minimal; iterative, fixed-seed shuffle → deterministic).
   - `CapsuleFitter`: `Along(axis)` = minimal enclosing circle of the projection for the radius + the shortest segment keeping every point inside the caps; `BestAxisAligned`, `BestOriented` (PCA axis).
   - Cylinder (N-sided convex mesh): later, with the convert operations in M4.
-- **`QuickHull3D`** — double precision, deterministic; `TryBuildCapped` enforces **≤ 255 triangles** by clustering hull vertices on a growing grid (keeping the vertex furthest from the centroid per cell) and rebuilding. Burst port when M2 needs it.
+- **`QuickHull3D`** — double precision, deterministic; `TryBuildCapped` enforces **≤ 255 triangles** by clustering hull vertices on a growing grid (keeping the vertex furthest from the centroid per cell) and rebuilding — only once the cluster count can fit (a hull of V points has ≤ 2V − 4 triangles). Burst port when M2 needs it.
 - **`GeometryUtils`** — Jacobi eigen decomposition, covariance, 2D hull, min-area rectangle, mesh volume, axis canonicalization. Closest-point / ray-vs-shape helpers arrive with picking (M4).
 
 ### 5.2 Optimization (criterion 2)
@@ -447,18 +447,25 @@ Sample source vertices (stride = `SampleDensity`), distance to collider surface 
 1. **Auto strategy** — most users press one button; experts open "Advanced".
 2. **Live ghost preview** before applying (pipeline is pure data until Apply) with estimated stats in the button area.
 3. **Non-destructive + regenerable** — recipe stored on `ColliderGroup`; locked entries survive regenerate.
-4. **Collider Doctor** (validator, Doctor tab + `Tools/Auto Collider/Run Doctor`), each issue has a one-click fix:
-   - concave MeshCollider on non-kinematic Rigidbody → make hull / decompose
-   - MeshCollider over triangle budget → optimize
-   - convex > 255 polys risk → apply guard
-   - negative / heavily non-uniform scale with sphere/capsule
-   - visible renderers without any collider (optional check)
-   - duplicate/overlapping identical colliders
-   - meshes not readable but needed at runtime
+4. **Collider Doctor** ✅ (M7; `Editor/Doctor`, Doctor tab + `Tools/Auto Collider/Run Doctor`). `ColliderDoctor.Scan(roots | all loaded scenes, Options)` → `DoctorIssue`s (check, severity, target, message, optional fix), sorted by severity then hierarchy order; `FixOne` / `FixAll` wrap fixes in one Undo group.
+   | Check | Severity | Fix |
+   |---|---|---|
+   | concave MeshCollider under a non-kinematic Rigidbody (looked up via `GetComponentInParent` — Unity never sets `attachedRigidbody` for that combination) | Error | Make Convex |
+   | concave MeshCollider trigger (only reachable through serialized data; PhysX rejects it) | Error | Make Convex |
+   | MeshCollider without mesh | Warning | Assign the MeshFilter mesh / Remove |
+   | concave mesh over `DoctorTriangleBudget` (20k) | Warning | Optimize (`ColliderOptimizer`, restorable) |
+   | convex mesh > 255 triangles | Info | Optimize (capped hull) |
+   | duplicate identical collider on one object (type + parameters signature) | Warning | Remove Duplicate (also unregisters it) |
+   | Collider Group entries with deleted colliders | Warning | Clean Up |
+   | Animated Mesh Collider without refs / Shared Mesh on a non-readable mesh | Warning | Enable Read/Write |
+   | negative scale on a MeshCollider | Info | — |
+   | user sphere / capsule under ≥ 1.25× non-uniform scale (generated ones are compensated) | Info | — |
+   | visible mesh without any collider (optional) | Info | Generate |
 5. **Mirror symmetry** for characters/vehicles (edit one side, mirror to the other).
 6. **Prefab-asset batch** — select prefabs/models in Project window, generate without opening them.
 7. **Team presets** as assets, default preset in Project Settings.
-8. **Hierarchy badge** (optional) — small icon on objects that have a `ColliderGroup`, with collider count.
+8. **Hierarchy badge** ✅ (M7, `HierarchyBadge`, `hierarchyWindowItemByEntityIdOnGUI`) — collider icon + count on objects that have a `ColliderGroup`; toggle in Project Settings.
+10. **Batch fit cache** ✅ (M7, `FitCache`) — inside a `BatchProcessor.Generate`, parts with identical geometry in target space (FNV-64 over vertex bits + indices), strategy, settings JSON and fit context are fitted once and cloned (`FittedShape.Clone`, shallow — later steps replace arrays, never write into them). Target position / rotation don't matter because fitting happens in the target's space; scale does.
 9. **Undo-safe everything**, one Ctrl+Z per action.
 
 ---
@@ -476,7 +483,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M4** Scene editing ✅ | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
 | **M5** Paint & skinned ✅ | Paint mode (brush triangle select, grow / connected), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
 | **M6** Runtime ✅ | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
-| **M7** Polish | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |
+| **M7** Polish ✅ | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |
 
 ---
 

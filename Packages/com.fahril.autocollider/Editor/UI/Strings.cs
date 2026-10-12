@@ -16,6 +16,8 @@ namespace AutoCollider.Editor
         public const string SectionGeneration = "Generation";
         public const string SectionSceneView = "Scene View";
         public const string SectionColors = "Colors";
+        public const string SectionDoctorHierarchy = "Doctor & Hierarchy";
+        public const string HierarchyBadgeTooltip = "{0} collider(s) in this Collider Group";
         public const string Browse = "Browse…";
         public const string BrowseTooltip = "Pick a folder inside Assets/ for generated collider meshes.";
         public const string BrowseDialogTitle = "Generated Collider Mesh Folder";
@@ -126,7 +128,56 @@ namespace AutoCollider.Editor
         public const string TabOptimize = "Optimize";
         public const string TabEdit = "Edit";
         public const string TabDoctor = "Doctor";
-        public const string ComingDoctor = "The scene validator arrives in milestone M7.";
+        public const string MenuRunDoctor = MenuRoot + "Run Doctor";
+
+        // Doctor
+        public const string DoctorIntro = "Finds collider setups that break or slow down physics — and fixes them in one click (each fix can be undone).";
+        public const string DoctorScopeTooltip = "Check the selected objects (and their children), or every open scene.";
+        public const string DoctorScan = "Scan";
+        public const string DoctorScanTooltip = "Look for collider problems now.";
+        public const string DoctorCheckMissing = "Report meshes without colliders";
+        public const string DoctorCheckMissingTooltip = "Also list visible meshes that have no collider at all (decor often doesn't need one, so this is off by default).";
+        public const string DoctorNotScanned = "Press Scan to check your colliders.";
+        public const string DoctorHealthy = "✓ No problems found ({0} objects checked).";
+        public const string DoctorSummary = "{0} errors · {1} warnings · {2} info";
+        public const string DoctorFixAll = "Fix All ({0})";
+        public const string DoctorFixAllTooltip = "Apply every available fix as one Undo step. Issues without a fix are left for you.";
+        public const string DoctorSelectTooltip = "Select and ping this object.";
+        public const string DoctorMissingObject = "(deleted)";
+        public const string UndoDoctorFix = "Auto Collider: Doctor Fix";
+        public const string UndoDoctorFixAll = "Auto Collider: Doctor Fix All";
+
+        public const string DoctorMissingMesh = "Mesh Collider has no mesh — it collides with nothing.";
+        public const string DoctorConcaveMoving = "Concave Mesh Collider on a moving Rigidbody — PhysX doesn't support this; the collider is ignored or errors at runtime.";
+        public const string DoctorConcaveTrigger = "Concave Mesh Colliders can't be triggers — the trigger never fires.";
+        public const string DoctorDetailedMesh = "Mesh collider with {0:N0} triangles (budget {1:N0}) — slow to cook and to collide.";
+        public const string DoctorComplexConvex = "Convex mesh with {0:N0} triangles — PhysX reduces it to 255 polygons when cooking (slow, unpredictable shape).";
+        public const string DoctorNegativeScale = "Negative scale: the mesh is re-cooked mirrored when loaded, which costs time. Prefer a mirrored mesh asset.";
+        public const string DoctorScaledPrimitive = "Non-uniform scale ({0:0.0}×): Unity sizes this collider by the largest axis, so it is bigger than the mesh.";
+        public const string DoctorDuplicate = "Identical collider on the same object — doubles the physics cost for nothing.";
+        public const string DoctorMissingEntries = "{0} tracked collider(s) were deleted outside Auto Collider.";
+        public const string DoctorNoCollider = "Visible mesh without any collider.";
+
+        public const string DoctorFixConvex = "Make Convex";
+        public const string DoctorFixConvexTooltip = "Set Convex on the Mesh Collider (works with moving Rigidbodies and triggers; loses concave detail — use Convex Decomposition for concave shapes).";
+        public const string DoctorFixAssignMesh = "Assign Mesh";
+        public const string DoctorFixAssignMeshTooltip = "Use the object's own (Mesh Filter) mesh.";
+        public const string DoctorFixRemove = "Remove";
+        public const string DoctorFixRemoveTooltip = "Delete this collider.";
+        public const string DoctorFixOptimize = "Optimize";
+        public const string DoctorFixOptimizeTooltip = "Replace the mesh with a simplified copy (Optimize tab settings; the original can be restored).";
+        public const string DoctorFixHullTooltip = "Replace the mesh with a convex hull of at most 255 triangles (the original can be restored).";
+        public const string DoctorFixRemoveDuplicate = "Remove Duplicate";
+        public const string DoctorFixRemoveDuplicateTooltip = "Delete this second, identical collider.";
+        public const string DoctorFixGenerate = "Generate";
+        public const string DoctorFixGenerateTooltip = "Generate colliders for this object with the window's current settings.";
+
+        public static string SeverityName(DoctorSeverity severity) => severity switch
+        {
+            DoctorSeverity.Error => "Error",
+            DoctorSeverity.Warning => "Warning",
+            _ => "Info",
+        };
 
         // Generate tab
         public const string TargetsHeader = "Targets ({0})";

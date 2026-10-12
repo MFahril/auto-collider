@@ -213,6 +213,13 @@ namespace AutoCollider.Editor
             for (var iteration = 0; iteration < 64; iteration++)
             {
                 var reduced = ClusterFurthest(source, min, cell, centroid);
+                // A hull of V points has at most 2V − 4 triangles; skip rebuilds that clearly can't fit (clustering is cheap,
+                // rebuilding is not). The margin keeps the cases where clustering moved points inside.
+                if (2 * reduced.Length - 4 > maxTriangles * 3 / 2)
+                {
+                    cell *= 1.2f;
+                    continue;
+                }
                 if (reduced.Length >= PhysicsLimits.MinHullVertices && TryBuild(reduced, out var candidate))
                 {
                     hull = candidate;

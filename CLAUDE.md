@@ -52,10 +52,11 @@ Packages/com.fahril.autocollider/
                                VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer,
                                PaintMesh (+ PaintMeshCache: world mesh, raycast, brush, grow), PaintDrawing (GL region tints)
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
-    Doctor/                    scene validator
+    Doctor/                    ColliderDoctor (scan + one-click fixes), DoctorIssue / DoctorCheck / DoctorSeverity
   Tests/Editor/                EditMode tests
   Tests/Runtime/               PlayMode tests (physics events, throttling, LOD)
-  Samples~/Demo/               demo scene + models
+  Samples~/Demo/               demo scene + meshes + sample scripts (registered in package.json; author it in a temp
+                               Assets/ folder so Unity makes the .meta GUIDs, then move it here with every .meta)
   Documentation~/              user manual
 Docs/ARCHITECTURE_PLAN.md      design (dev-facing)
 Docs/ROADMAP.md                milestone tracker — tick tasks here
@@ -181,11 +182,12 @@ Use this when designing fitters, writers, and validators.
    - Simplifier: bounds preserved within tolerance, no degenerate triangles, deterministic output.
    - Decomposition: every part convex & ≤ 255 faces, union covers source within tolerance.
    - Writer/Batch: one Undo group restores scene exactly; user colliders untouched.
-4. Scene tests: the Test Runner already isolates EditMode runs in an untitled scene — don't create additive scenes; destroy the root objects a test created in `TearDown`, and write meshes to a temp folder you delete.
-5. Unity-MCP `execute_code` blocks `AssetDatabase.DeleteAsset` unless `safety_checks: false`; only disable it for paths you created.
-6. Never mark work done with compile errors or failing tests — report them.
-7. Don't modify `Assets/Mystery Studio/` (third-party reference, not committed) or `Library/`, `Temp/`, `*.csproj`.
-8. Commits follow §6.
+4. Scene tests: EditMode tests run in **whatever scene is open**, and the runner reverts Undo afterwards — an Undo-destroyed component whose GameObject TearDown then `DestroyImmediate`d comes back (in memory, in the user's scene). Every scene test uses `TestScene` (`new TestScene()` in SetUp, `Cleanup(folder)` in TearDown): it reverts the test's own Undo groups first, then destroys what the test created and deletes its temp asset folder. Don't create additive scenes. After a run, check the open scene has no extra roots.
+5. Every UI control needs a tooltip — `UiTooltipTests` walks all tabs, inspectors, the settings page and the overlay and fails otherwise. New UI surfaces must be added there.
+6. Unity-MCP `execute_code` blocks `AssetDatabase.DeleteAsset` unless `safety_checks: false`; only disable it for paths you created.
+7. Never mark work done with compile errors or failing tests — report them.
+8. Don't modify `Assets/Mystery Studio/` (third-party reference, not committed) or `Library/`, `Temp/`, `*.csproj`.
+9. Commits follow §6.
 
 ---
 

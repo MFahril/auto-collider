@@ -98,10 +98,11 @@ namespace AutoCollider.Editor
 
             if (settings.Granularity == MeshGranularity.Combined && parts.Count > 1) CombinePerLod(target.name, parts, partLods);
 
+            var settingsKey = FitCache.Active ? strategyKind + "|" + JsonUtility.ToJson(settings) : null;
             for (var p = 0; p < parts.Count; p++)
             {
                 var part = parts[p];
-                var shapes = strategy.Fit(FitInput.Create(part), context);
+                var shapes = FitCache.Fit(strategy, part, context, settingsKey);
                 for (var i = 0; i < shapes.Count; i++)
                 {
                     var shape = shapes[i];

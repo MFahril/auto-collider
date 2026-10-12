@@ -48,15 +48,9 @@ namespace AutoCollider.Editor
             if (pca.Volume < best.Volume) best = pca;
             if (hull == null) return best;
 
-            var tried = new HashSet<int3>();
             var projected = new List<double2>(hullPoints.Count);
-            foreach (var normal in hull.FaceNormals())
+            foreach (var n in CandidateDirections(hull))
             {
-                // n and -n give the same box; quantize to skip near-duplicate directions.
-                var n = normal;
-                if (n.x < 0 || (n.x == 0 && (n.y < 0 || (n.y == 0 && n.z < 0)))) n = -n;
-                if (!tried.Add((int3)math.round(n * 2000f))) continue;
-
                 GeometryUtils.Basis(n, out var u, out var v);
                 projected.Clear();
                 for (var i = 0; i < hullPoints.Count; i++)
@@ -70,6 +64,53 @@ namespace AutoCollider.Editor
                 if (candidate.Volume < best.Volume) best = candidate;
             }
             return best;
+        }
+
+        /// <summary>Face directions tried by <see cref="MinVolume"/>; caps the cost on round hulls (hundreds of tiny faces).</summary>
+        private const int MaxDirections = 64;
+
+        /// <summary>
+        /// Distinct hull face directions (n and −n merged, near-duplicates quantized together), ranked by the hull area facing
+        /// them — coplanar triangles add up, so real flat faces always come first. Ties keep face order (deterministic).
+        /// </summary>
+        private static List<float3> CandidateDirections(ConvexHull hull)
+        {
+            var area = new Dictionary<int3, float>();
+            var direction = new Dictionary<int3, float3>();
+            var order = new List<int3>();
+            var vertices = hull.Vertices;
+            var triangles = hull.Triangles;
+            for (var i = 0; i < triangles.Length; i += 3)
+            {
+                var a = vertices[triangles[i]];
+                var cross = math.cross(vertices[triangles[i + 1]] - a, vertices[triangles[i + 2]] - a);
+                var doubleArea = math.length(cross);
+                if (doubleArea < 1e-12f) continue;
+                var n = cross / doubleArea;
+                if (n.x < 0 || (n.x == 0 && (n.y < 0 || (n.y == 0 && n.z < 0)))) n = -n;
+
+                var key = (int3)math.round(n * 2000f);
+                if (area.TryGetValue(key, out var sum))
+                {
+                    area[key] = sum + doubleArea;
+                    continue;
+                }
+                area[key] = doubleArea;
+                direction[key] = n;
+                order.Add(key);
+            }
+
+            var ranked = new List<int>(order.Count);
+            for (var i = 0; i < order.Count; i++) ranked.Add(i);
+            ranked.Sort((x, y) =>
+            {
+                var byArea = area[order[y]].CompareTo(area[order[x]]);
+                return byArea != 0 ? byArea : x.CompareTo(y);
+            });
+
+            var result = new List<float3>(math.min(MaxDirections, ranked.Count));
+            for (var i = 0; i < ranked.Count && i < MaxDirections; i++) result.Add(direction[order[ranked[i]]]);
+            return result;
         }
 
         /// <summary>Tightest box with the given orthonormal axes (columns).</summary>

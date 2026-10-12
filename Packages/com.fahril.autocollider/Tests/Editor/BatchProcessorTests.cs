@@ -15,19 +15,18 @@ namespace AutoCollider.Editor.Tests
     {
         private const string MeshFolder = "Assets/__AutoColliderTestMeshes";
 
-        private HashSet<GameObject> _rootsBefore;
+        private TestScene _scene;
 
         [SetUp]
         public void SetUp()
         {
-            _rootsBefore = new HashSet<GameObject>(SceneManager.GetActiveScene().GetRootGameObjects());
+            _scene = new TestScene();
         }
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-                if (!_rootsBefore.Contains(root)) Object.DestroyImmediate(root);
+            _scene.Cleanup();
             AssetDatabase.DeleteAsset(MeshFolder);
         }
 
@@ -51,6 +50,27 @@ namespace AutoCollider.Editor.Tests
 
         private static List<Collider> GeneratedColliders(GameObject go) =>
             go.GetComponent<ColliderGroup>().Entries.Where(e => e.Generated).Select(e => e.Collider).ToList();
+
+        [Test]
+        public void Generate_RepeatedProps_AreFittedOnce_WithIdenticalColliders()
+        {
+            var props = new List<GameObject>();
+            for (var i = 0; i < 6; i++)
+            {
+                var go = Primitive(PrimitiveType.Sphere, $"Ball {i}", new Vector3(i * 3, 0, 0));
+                Object.DestroyImmediate(go.GetComponent<Collider>());
+                props.Add(go);
+            }
+            props[5].transform.localScale = Vector3.one * 2f; // different size → its own fit
+
+            BatchProcessor.Generate(props, Settings(ColliderStrategy.Sphere), MeshFolder, showProgress: false);
+
+            Assert.That(FitCache.Hits, Is.EqualTo(4));
+            Assert.That(FitCache.Active, Is.False, "The cache only lives during a batch");
+            var radii = props.Select(p => ((SphereCollider)GeneratedColliders(p)[0]).radius).ToList();
+            Assert.That(radii.Take(5).Distinct().Count(), Is.EqualTo(1));
+            Assert.That(radii[5], Is.EqualTo(radii[0]).Within(1e-4f), "Fitted separately; the same local radius (the scale makes it bigger)");
+        }
 
         [Test]
         public void Generate_TenObjects_OneUndoRevertsAll_UserCollidersUntouched()

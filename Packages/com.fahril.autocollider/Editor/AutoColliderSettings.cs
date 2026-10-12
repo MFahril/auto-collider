@@ -66,6 +66,16 @@ namespace AutoCollider.Editor
         [Tooltip("Show collider names in the Scene view while the collider tool is active.")]
         public bool ShowLabels;
 
+        [Tooltip("Show a collider-count badge next to objects with a Collider Group in the Hierarchy window.")]
+        public bool ShowHierarchyBadge = true;
+
+        [Tooltip("Collider Doctor: concave mesh colliders with more triangles than this are reported as too detailed.")]
+        [Min(100)]
+        public int DoctorTriangleBudget = 20_000;
+
+        [Tooltip("Collider Doctor: also report visible meshes that have no collider at all.")]
+        public bool DoctorCheckMissingColliders;
+
         [Tooltip("Opacity of the filled collider surfaces drawn in the Scene view.")]
         [Range(0f, 1f)]
         public float FillOpacity = 0.15f;

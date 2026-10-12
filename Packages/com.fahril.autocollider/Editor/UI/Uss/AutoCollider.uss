@@ -14,6 +14,7 @@
     --ac-radius: 4px;
     --ac-font-title: 18px;
     --ac-font-section: 13px;
+    --ac-on-accent: #ffffff;
 }
 
 .ac-root--dark {
@@ -101,7 +102,7 @@
 
 .ac-button--primary {
     background-color: var(--ac-accent);
-    color: #ffffff;
+    color: var(--ac-on-accent);
     -unity-font-style: bold;
 }
 
@@ -371,7 +372,7 @@
 
 .ac-overlay__toggle--on {
     background-color: var(--ac-accent);
-    color: #ffffff;
+    color: var(--ac-on-accent);
 }
 
 .ac-overlay__summary {
@@ -439,4 +440,58 @@
     overflow: hidden;
     text-overflow: ellipsis;
     -unity-text-align: middle-left;
+}
+
+/* ---------- Doctor ---------- */
+
+.ac-doctor-row {
+    flex-direction: row;
+    align-items: center;
+    height: 24px;
+    padding: 0 var(--ac-spacing-xs);
+}
+
+.ac-severity {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    margin: 0 var(--ac-spacing-s);
+    flex-shrink: 0;
+}
+
+.ac-severity--error {
+    background-color: var(--ac-error);
+}
+
+.ac-severity--warning {
+    background-color: var(--ac-warning);
+}
+
+.ac-severity--info {
+    background-color: var(--ac-accent);
+}
+
+.ac-doctor-row__target {
+    max-width: 40%;
+    flex-shrink: 1;
+    margin: 0 var(--ac-spacing-s) 0 0;
+    padding: 0 var(--ac-spacing-s);
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    -unity-text-align: middle-left;
+    -unity-font-style: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ac-doctor-row__target:hover {
+    color: var(--ac-accent);
+}
+
+.ac-doctor-row__message {
+    flex-grow: 1;
+    flex-shrink: 1;
+    color: var(--ac-subtle-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

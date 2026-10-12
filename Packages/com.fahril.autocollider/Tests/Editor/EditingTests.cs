@@ -12,12 +12,12 @@ namespace AutoCollider.Editor.Tests
     public class EditingTests
     {
         private const string MeshFolder = "Assets/__AutoColliderEditTests";
-        private HashSet<GameObject> _rootsBefore;
+        private TestScene _scene;
 
         [SetUp]
         public void SetUp()
         {
-            _rootsBefore = new HashSet<GameObject>(SceneManager.GetActiveScene().GetRootGameObjects());
+            _scene = new TestScene();
             ColliderOperations.MeshFolderOverride = MeshFolder;
             ColliderEditState.ClearSelection();
             ColliderEditState.ShowAll();
@@ -29,8 +29,7 @@ namespace AutoCollider.Editor.Tests
             ColliderEditState.ClearSelection();
             ColliderEditState.ShowAll();
             ColliderOperations.MeshFolderOverride = null;
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-                if (!_rootsBefore.Contains(root)) Object.DestroyImmediate(root);
+            _scene.Cleanup();
             AssetDatabase.DeleteAsset(MeshFolder);
         }
 

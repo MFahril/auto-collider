@@ -69,6 +69,9 @@ namespace AutoCollider.Editor
 
         public bool IsMesh => Kind == ShapeKind.ConvexMesh || Kind == ShapeKind.ConcaveMesh;
 
+        /// <summary>Shallow copy. Safe to share hull / mesh data: later steps replace those arrays, never write into them.</summary>
+        public FittedShape Clone() => (FittedShape)MemberwiseClone();
+
         /// <summary>Vertices / triangles of mesh shapes (hull or concave mesh); null for primitives.</summary>
         public float3[] MeshVertices => Kind == ShapeKind.ConvexMesh ? Hull.Vertices : Mesh?.Vertices;
 

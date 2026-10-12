@@ -22,7 +22,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M4 | Scene editing | 4 | ✅ |
 | M5 | Paint & skinned | 4 | ✅ |
 | M6 | Runtime bridge features | 5 | ✅ |
-| M7 | Polish & release | 1 | ⬜ |
+| M7 | Polish & release | 1 | ✅ |
 
 Criteria: 1 clean UI · 2 optimize · 3 multi-object · 4 scene editing · 5 multi-collider bridge.
 
@@ -180,17 +180,27 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M7 — Polish & release ⬜
+## M7 — Polish & release ✅
 
-- [ ] Collider Doctor (checks + one-click fixes) — Doctor tab + menu
-- [ ] Hierarchy badge (optional, toggle in settings)
-- [ ] `Documentation~` user manual
-- [ ] `Samples~/Demo` (scene + models) registered in `package.json`
-- [ ] Perf pass: 1 000-object batch, large meshes, inspector with 500 entries
-- [ ] UI polish in both skins; every control tooltipped
-- [ ] Version bump 1.0.0 + CHANGELOG
+- [x] **Collider Doctor** (`Editor/Doctor`): 11 checks — concave on moving Rigidbody, concave trigger, missing mesh, concave mesh over the triangle budget, convex mesh > 255 triangles, negative scale, user sphere / capsule under strongly non-uniform scale, duplicate colliders, missing group entries, Animated Mesh Collider setup / Read/Write, (optional) visible meshes without colliders. One-click fixes (Make Convex, Assign Mesh / Remove, Optimize, capped hull, Remove Duplicate, Clean Up, Enable Read/Write, Generate), each one Undo step; **Fix All (N)** is one step. Doctor tab (scope, scan, severity dots, select / ping, per-row fix) + `Tools ▸ Auto Collider ▸ Run Doctor`; settings: triangle budget, report meshes without colliders
+- [x] Hierarchy badge (collider count + tooltip on objects with a Collider Group; Project Settings ▸ Show Hierarchy Badge)
+- [x] `Documentation~/index.md` user manual (install, quick start, Collider Group, generation, optimization, editing, painting, characters, runtime API, Doctor, settings, shortcuts, troubleshooting)
+- [x] `Samples~/Demo` registered in `package.json`: demo scene (table, arch, skinned robot arm, LOD pillar, a heavy rock collider, a concave collider on a Rigidbody and duplicate colliders for the Doctor), sample scripts (`HitReporter` using group events, `DemoHud`, `BallDropper`, `DemoWave`), URP materials, README walkthrough
+- [x] Perf pass. 1,000-object batch (cubes + spheres, Auto) **~55 s → 3.9 s**:
+  - min-volume OBB tries at most the 64 directions with the most hull area facing them (107 → 14 ms on a 515-vertex sphere);
+  - the capped hull skips rebuilds that can't fit (2V − 4 triangles; 15.6 → ~7 ms);
+  - a batch-scoped **fit cache** fits repeated props once (same geometry in target space + strategy + settings + context).
 
-**Done when:** Doctor finds & fixes seeded issues; docs + sample importable via Package Manager.
+  Results for the other checks:
+  - 980k-triangle mesh: Auto 0.73 s, hull 0.48 s, optimized mesh 0.79 s, decomposition 5.0 s (merge hulls dominate → backlog: Burst QuickHull);
+  - inspector with 500 entries: build 19 ms, refresh 0.1 ms;
+  - undo of 1,000 objects: 76 ms.
+- [x] UI polish: `UiTooltipTests` walks every window tab, both inspectors, the Project Settings page and the Scene overlay and fails on any control without a tooltip (all Apply buttons got one); the last hard-coded color moved into a token (`--ac-on-accent`)
+- [x] **Test hygiene fix:** the test runner reverts Undo after a run, which resurrected objects whose components were Undo-destroyed and then `DestroyImmediate`d in TearDown — they reappeared in the open scene (never saved). `TestScene` (used by every scene test) reverts the test's own Undo groups before destroying
+- [x] Version 1.0.0 + CHANGELOG, README, manual
+- [x] Tests (+18): Doctor (12: every check found, each fix + undo, Fix All one step, severity order, healthy generated setup), fit cache, UI tooltips (4), sample packaging
+
+**Done when:** Doctor finds & fixes seeded issues; docs + sample importable via Package Manager. → *Verified 2026-10-12: 163/163 EditMode + 8/8 PlayMode tests, console clean, dev scene clean after the full run. The Doctor on the demo scene finds exactly its three seeded problems; Auto on the demo props → table boxes, arch optimized mesh, robot arm per-bone capsules (397 ms); sample folder has every `.meta`, its scripts are editor-free and it's registered in `package.json`.*
 
 ---
 
@@ -224,3 +234,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M4 ✅ | Collider edit tool + overlay, picking, handles, vertex snap, 10 operations (one Undo each), shortcuts, inspector sync; fixed Undo record ordering; 121 tests green; package 0.5.0 |
 | 2026-10-12 | M5 ✅ | Paint mode (brush, grow / connected, regions stored in the recipe, identical regenerate), per-bone colliders for skinned meshes (follow animation, L/R symmetry), Auto → per bone on skinned; 134 tests green; package 0.6.0 |
 | 2026-10-12 | M6 ✅ | Group collision / trigger events with the hit part (relays, no double reports), bulk layer overrides + contacts, Animated Mesh Collider (throttled), per-LOD colliders + LOD follower; 145 EditMode + 8 PlayMode tests green; package 0.7.0 |
+| 2026-10-12 | M7 ✅ | Collider Doctor (11 checks, one-click fixes, Fix All), hierarchy badge, user manual, Demo sample, perf pass (1,000-object batch 55 s → 3.9 s: capped OBB directions, faster capped hull, batch fit cache), tooltip guard, test-scene leak fix; 163 EditMode + 8 PlayMode tests green; package 1.0.0 |

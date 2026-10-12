@@ -7,13 +7,25 @@ namespace AutoCollider.Editor
     /// <summary>Main Auto Collider window: Generate / Optimize / Edit / Doctor tabs.</summary>
     internal sealed class AutoColliderWindow : EditorWindow
     {
+        private TabView _tabs;
+        private Tab _doctorTab;
+        private DoctorTab _doctor;
+
         [MenuItem(Strings.MenuOpenWindow, priority = 0)]
-        public static void Open()
+        public static void Open() => OpenWindow(false);
+
+        [MenuItem(Strings.MenuRunDoctor, priority = 1)]
+        public static void RunDoctor() => OpenWindow(true);
+
+        private static void OpenWindow(bool doctor)
         {
             var window = GetWindow<AutoColliderWindow>();
             window.titleContent = new GUIContent(Strings.ProductName, AssetPreview.GetMiniTypeThumbnail(typeof(BoxCollider)));
             window.minSize = new Vector2(320, 420);
             window.Show();
+            if (!doctor || window._tabs == null) return;
+            window._tabs.activeTab = window._doctorTab;
+            window._doctor.ScanScene();
         }
 
         private void CreateGUI()
@@ -25,14 +37,16 @@ namespace AutoCollider.Editor
             scroll.AddToClassList("ac-window");
             root.Add(scroll);
 
-            var tabs = new TabView { viewDataKey = "AutoCollider.Window.Tabs" };
-            tabs.AddToClassList("ac-tabs");
-            scroll.Add(tabs);
+            _tabs = new TabView { viewDataKey = "AutoCollider.Window.Tabs" };
+            _tabs.AddToClassList("ac-tabs");
+            scroll.Add(_tabs);
 
-            tabs.Add(MakeTab(Strings.TabGenerate, new GenerateTab()));
-            tabs.Add(MakeTab(Strings.TabOptimize, new OptimizeTab()));
-            tabs.Add(MakeTab(Strings.TabEdit, new EditTab()));
-            tabs.Add(MakeTab(Strings.TabDoctor, Placeholder(Strings.ComingDoctor)));
+            _tabs.Add(MakeTab(Strings.TabGenerate, new GenerateTab()));
+            _tabs.Add(MakeTab(Strings.TabOptimize, new OptimizeTab()));
+            _tabs.Add(MakeTab(Strings.TabEdit, new EditTab()));
+            _doctor = new DoctorTab();
+            _doctorTab = MakeTab(Strings.TabDoctor, _doctor);
+            _tabs.Add(_doctorTab);
         }
 
         private static Tab MakeTab(string title, VisualElement content)
@@ -40,14 +54,6 @@ namespace AutoCollider.Editor
             var tab = new Tab(title);
             tab.Add(content);
             return tab;
-        }
-
-        private static VisualElement Placeholder(string text)
-        {
-            var label = new Label(text);
-            label.AddToClassList("ac-empty");
-            label.AddToClassList("ac-placeholder");
-            return label;
         }
     }
 }

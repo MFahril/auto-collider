@@ -3,6 +3,25 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [1.0.0] - 2026-10-12
+
+First complete release: generation, optimization, decomposition, scene editing, painting, characters, runtime events and
+the Collider Doctor.
+
+### Added
+- **Collider Doctor** (`Tools ▸ Auto Collider ▸ Run Doctor`, window *Doctor* tab): finds concave colliders on moving Rigidbodies, concave triggers, missing meshes, over-detailed mesh colliders, convex meshes over 255 triangles, negative scale, oddly scaled spheres / capsules, duplicate colliders, broken Collider Group entries, Animated Mesh Collider setup problems and (optionally) meshes without colliders — with one-click fixes, each undoable, and **Fix All**.
+- **Hierarchy badge**: collider count next to objects with a Collider Group (Project Settings ▸ Show Hierarchy Badge).
+- **Demo sample** (Package Manager ▸ Samples): a scene with props to generate, a skinned robot arm, a LOD object, deliberate mistakes for the Doctor and live collision events.
+- **User manual** in `Documentation~`.
+- Project Settings: Doctor triangle budget, report meshes without colliders.
+
+### Changed
+- Much faster batches: generating for 1,000 props takes ~4 s instead of about a minute. Repeated props (same mesh and scale) are fitted once per batch, rotated box fitting tries only the 64 most significant directions, and the 255-triangle hull cap skips rebuilds that can't fit.
+- Every control in the window, inspectors, settings page and Scene overlay has a tooltip (enforced by a test).
+
+### Fixed
+- EditMode test runs could leave test objects in the open scene (in memory only, never saved) because the test runner reverts Undo afterwards.
+
 ## [0.7.0] - 2026-10-12
 
 ### Added
