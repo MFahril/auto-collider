@@ -30,6 +30,16 @@ namespace AutoCollider.Editor
         [MenuItem(GameObjectMenu + "Remove Generated Colliders", true)]
         private static bool ValidateRemoveMenu() => HasSceneSelection();
 
+        [MenuItem(GameObjectMenu + "Paint Colliders", false, 42)]
+        private static void PaintMenu(MenuCommand command)
+        {
+            if (IsRepeatedContextInvocation(command)) return;
+            ColliderToolCommands.StartPainting();
+        }
+
+        [MenuItem(GameObjectMenu + "Paint Colliders", true)]
+        private static bool ValidatePaintMenu() => HasSceneSelection();
+
         [Shortcut(Strings.ShortcutCategory + "/Generate Colliders for Selection", KeyCode.C, ShortcutModifiers.Shift | ShortcutModifiers.Alt)]
         public static void GenerateForSelection()
         {

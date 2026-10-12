@@ -3,6 +3,18 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-10-12
+
+### Added
+- **Paint mode** (M5) in the collider edit tool (key **3**, `GameObject ▸ Auto Collider ▸ Paint Colliders`, window *Edit* tab — works on objects without colliders yet):
+  - Screen-space triangle brush on the source meshes (front faces only, doesn't bleed through), Ctrl+drag erases, `[` / `]` brush size, Esc clears; *All*, *Connected* and *Grow* selection helpers.
+  - Create a collider from the painted triangles: Auto, Box (rotated when tighter), Sphere, Capsule, Convex or Parts (convex decomposition) — one Undo step.
+  - Painted **regions** are stored in the Collider Group's recipe; Generate / Regenerate rebuild exactly those colliders (locked ones are kept). Region list in the overlay (re-paint, delete) and *Clear Regions* in the inspector.
+- **Per Bone** strategy for skinned meshes, also chosen by Auto: one collider per bone (strongest-weight vertices, fitted in the bone's bind pose), placed on a child of the bone so it follows animation. Settings: Bone Shape, Bone Weight Threshold, Min Bone Vertices, Symmetric Bones (Left/Right pairs get the same size) — "Skinned Meshes" foldout.
+
+### Changed
+- Removing generated colliders also deletes the GameObjects Auto Collider created for them (bone children, detached colliders) — and never any other object.
+
 ## [0.5.0] - 2026-10-12
 
 ### Added

@@ -99,6 +99,96 @@ namespace AutoCollider.Editor
             ColliderEditState.NotifyChanged();
         }
 
+        // ---------- Paint ----------
+
+        /// <summary>Collider Groups on the selected objects (the tool's targets).</summary>
+        public static List<ColliderGroup> SelectedGroups() =>
+            UnityEditor.Selection.gameObjects.Select(g => g.GetComponent<ColliderGroup>()).Where(g => g != null).ToList();
+
+        /// <summary>
+        /// Start painting: adds an empty Collider Group to selected objects that have none (one Undo step), activates the
+        /// tool and switches to Paint mode.
+        /// </summary>
+        public static void StartPainting()
+        {
+            var objects = UnityEditor.Selection.gameObjects.Where(g => !EditorUtility.IsPersistent(g)).ToList();
+            if (objects.Count == 0)
+            {
+                Notify(Strings.NotifyNothingSelected);
+                return;
+            }
+
+            var missing = objects.Where(g => g.GetComponent<ColliderGroup>() == null).ToList();
+            if (missing.Count > 0)
+            {
+                Undo.IncrementCurrentGroup();
+                var undoGroup = Undo.GetCurrentGroup();
+                Undo.SetCurrentGroupName(Strings.UndoAddGroup);
+                foreach (var go in missing)
+                {
+                    var group = Undo.AddComponent<ColliderGroup>(go);
+                    ColliderWriter.RecordGroup(group, Strings.UndoAddGroup);
+                    group.Recipe.Settings = GenerationSettingsState.instance.Settings.Clone();
+                }
+                Undo.CollapseUndoOperations(undoGroup);
+            }
+
+            ColliderEditState.SetMode(ColliderToolMode.Paint);
+            ActivateTool();
+        }
+
+        public static void PaintAll()
+        {
+            foreach (var mesh in PaintMeshCache.For(SelectedGroups()))
+                ColliderEditState.SetPainted(mesh.Renderer, Enumerable.Range(0, mesh.TriangleCount));
+        }
+
+        public static void PaintConnected() => ExpandPaint((mesh, set) => mesh.Connected(set));
+
+        public static void PaintGrow() => ExpandPaint((mesh, set) => mesh.Grow(set));
+
+        private static void ExpandPaint(System.Func<PaintMesh, HashSet<int>, HashSet<int>> expand)
+        {
+            foreach (var pair in ColliderEditState.Painted.ToList())
+            {
+                var mesh = PaintMeshCache.Get(pair.Key, pair.Key.GetComponentInParent<ColliderGroup>(true));
+                if (mesh != null) ColliderEditState.SetPainted(pair.Key, expand(mesh, pair.Value));
+            }
+        }
+
+        public static void ClearPaint() => ColliderEditState.ClearPaint();
+
+        /// <summary>Turn the current paint into region(s) of the given shape, then select the new colliders.</summary>
+        public static void CreateRegion(PartShape shape)
+        {
+            if (ColliderEditState.PaintedCount == 0)
+            {
+                Notify(Strings.NotifyNothingPainted);
+                return;
+            }
+            var created = ColliderOperations.CreateRegions(ColliderEditState.Painted, shape);
+            ColliderEditState.ClearPaint();
+            if (created.Count > 0) ColliderEditState.Select(created);
+            Notify(string.Format(Strings.NotifyRegionCreated, created.Count));
+        }
+
+        /// <summary>Load a region's triangles back into the paint selection (to see or re-make it).</summary>
+        public static void LoadRegion(PaintedRegion region)
+        {
+            ColliderEditState.SetPainted(region.Renderer, region.Triangles);
+            ColliderEditState.SetMode(ColliderToolMode.Paint);
+        }
+
+        public static void DeleteRegion(ColliderGroup group, PaintedRegion region)
+        {
+            ColliderOperations.DeleteRegion(group, region.Id);
+            ColliderEditState.Prune();
+            ColliderEditState.NotifyChanged();
+        }
+
+        public static void ResizeBrush(float factor) =>
+            ColliderEditState.BrushRadius = Mathf.Clamp(ColliderEditState.BrushRadius * factor, 4f, 256f);
+
         public static void SelectAll(IEnumerable<ColliderGroup> groups) =>
             ColliderEditState.Select(ColliderShapes.CollidersOf(groups).Where(ColliderEditState.IsVisible));
 
@@ -157,6 +247,15 @@ namespace AutoCollider.Editor
 
         [Shortcut(Prefix + "Edit Mode", typeof(ColliderToolShortcutContext), KeyCode.Alpha2)]
         private static void EditMode() => ColliderEditState.SetMode(ColliderToolMode.Edit);
+
+        [Shortcut(Prefix + "Paint Mode", typeof(ColliderToolShortcutContext), KeyCode.Alpha3)]
+        private static void PaintMode() => ColliderEditState.SetMode(ColliderToolMode.Paint);
+
+        [Shortcut(Prefix + "Smaller Brush", typeof(ColliderToolShortcutContext), KeyCode.LeftBracket)]
+        private static void SmallerBrush() => ColliderToolCommands.ResizeBrush(1f / 1.25f);
+
+        [Shortcut(Prefix + "Bigger Brush", typeof(ColliderToolShortcutContext), KeyCode.RightBracket)]
+        private static void BiggerBrush() => ColliderToolCommands.ResizeBrush(1.25f);
 
         [Shortcut(Prefix + "Resize", typeof(ColliderToolShortcutContext), KeyCode.R)]
         private static void Resize() => ColliderEditState.SetHandleMode(ColliderHandleMode.Resize);

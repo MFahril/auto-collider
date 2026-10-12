@@ -81,6 +81,15 @@ namespace AutoCollider.Editor
             _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MaxTriangles)));
             _meshOptimization.Add(Field(settings, nameof(GenerationSettings.MinIslandSize)));
 
+            var skinned = Foldout(this, Strings.SectionSkinned, "AutoCollider.Generate.Skinned");
+            var skinnedHint = new Label(Strings.SkinnedHint);
+            skinnedHint.AddToClassList("ac-hint");
+            skinned.Add(skinnedHint);
+            skinned.Add(Field(settings, nameof(GenerationSettings.BoneShape)));
+            skinned.Add(Field(settings, nameof(GenerationSettings.BoneWeightThreshold)));
+            skinned.Add(Field(settings, nameof(GenerationSettings.MinBoneVertices)));
+            skinned.Add(Field(settings, nameof(GenerationSettings.SymmetricBones)));
+
             var decomposition = Foldout(this, Strings.SectionDecomposition, "AutoCollider.Generate.Decomposition");
             var decompositionHint = new Label(Strings.DecompositionHint);
             decompositionHint.AddToClassList("ac-hint");

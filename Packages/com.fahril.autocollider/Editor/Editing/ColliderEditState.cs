@@ -65,8 +65,54 @@ namespace AutoCollider.Editor
 
         public static void SetMode(ColliderToolMode mode)
         {
-            if (mode == ColliderToolMode.Paint) return; // arrives in M5
             Mode = mode;
+            NotifyChanged();
+        }
+
+        // ---------- Paint ----------
+
+        private static readonly Dictionary<Renderer, HashSet<int>> PaintedTriangles = new();
+
+        private static float _brushRadius = 24f;
+
+        /// <summary>Brush radius in screen points.</summary>
+        public static float BrushRadius
+        {
+            get => _brushRadius;
+            set
+            {
+                _brushRadius = Mathf.Clamp(value, 4f, 256f);
+                NotifyChanged();
+            }
+        }
+
+        /// <summary>Painted (not yet turned into a region) triangles per renderer.</summary>
+        public static IReadOnlyDictionary<Renderer, HashSet<int>> Painted => PaintedTriangles;
+
+        public static int PaintedCount => PaintedTriangles.Values.Sum(s => s.Count);
+
+        public static void Paint(Renderer renderer, IEnumerable<int> triangles, bool erase)
+        {
+            if (renderer == null) return;
+            if (!PaintedTriangles.TryGetValue(renderer, out var set)) PaintedTriangles[renderer] = set = new HashSet<int>();
+            var changed = false;
+            foreach (var t in triangles) changed |= erase ? set.Remove(t) : set.Add(t);
+            if (set.Count == 0) PaintedTriangles.Remove(renderer);
+            if (changed) NotifyChanged();
+        }
+
+        public static void SetPainted(Renderer renderer, IEnumerable<int> triangles)
+        {
+            if (renderer == null) return;
+            PaintedTriangles[renderer] = new HashSet<int>(triangles);
+            if (PaintedTriangles[renderer].Count == 0) PaintedTriangles.Remove(renderer);
+            NotifyChanged();
+        }
+
+        public static void ClearPaint()
+        {
+            if (PaintedTriangles.Count == 0) return;
+            PaintedTriangles.Clear();
             NotifyChanged();
         }
 
@@ -114,6 +160,7 @@ namespace AutoCollider.Editor
         /// <summary>Drop destroyed colliders (after undo / delete).</summary>
         public static void Prune()
         {
+            foreach (var renderer in PaintedTriangles.Keys.Where(r => r == null).ToList()) PaintedTriangles.Remove(renderer);
             var removed = SelectedList.RemoveAll(c => c == null);
             Hidden.RemoveWhere(c => c == null);
             _soloSet?.RemoveWhere(c => c == null);

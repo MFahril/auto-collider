@@ -20,7 +20,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M2 | Optimization | 2 | ✅ |
 | M3 | Convex decomposition | 2 | ✅ |
 | M4 | Scene editing | 4 | ✅ |
-| M5 | Paint & skinned | 4 | ⬜ |
+| M5 | Paint & skinned | 4 | ✅ |
 | M6 | Runtime bridge features | 5 | ⬜ |
 | M7 | Polish & release | 1 | ⬜ |
 
@@ -155,16 +155,16 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M5 — Paint & skinned ⬜
+## M5 — Paint & skinned ✅
 
-- [ ] Paint mode (brush + box triangle/vertex selection on source mesh)
-- [ ] Create box / rotated box / sphere / capsule / hull / auto-decompose from selection
-- [ ] `PaintedRegion` stored in recipe; Regenerate reproduces result; locked entries kept
-- [ ] `PerBone` strategy (weight assignment, bone-local fit, parent to bone)
-- [ ] Mirror L/R by bone name pattern
-- [ ] Tests: paint 3 regions → regenerate identical; per-bone capsules on skinned sample
+- [x] Paint mode in the edit tool (key 3, `GameObject ▸ Auto Collider ▸ Paint Colliders`, window Edit tab): screen-space triangle brush on the source meshes (front faces only, depth tolerance so it doesn't bleed through, `[` / `]` resize, Ctrl+drag erases, Esc clears), All / Connected / Grow (welded adjacency); painting works on objects without colliders (adds a Collider Group, one Undo step). `PaintMesh` (world-space mesh + Möller–Trumbore raycast), `PaintMeshCache` (rebuilt when the renderer moves), `PaintDrawing` (GL tint per region + brush disc). Box (rectangle) select moved to the Backlog
+- [x] Create from the painted triangles: Auto / Box (rotated when it's tighter) / Sphere / Capsule / Convex / Parts (decomposition) — `RegionFitter`, shared with the pipeline so creating and regenerating give the same result
+- [x] `PaintedRegion` (renderer + triangle indices + shape + label) stored in the recipe; region ids ≥ 10000 tag their colliders (`PartId`); with regions, Generate / Regenerate rebuild only the regions (Technie-style) and locked region colliders suppress their region; overlay region list (swatch, re-paint, delete) + inspector *Clear Regions*; missing renderer / changed triangles → warnings
+- [x] `PerBone` strategy (also what Auto picks for skinned meshes): strongest-bone vertex assignment (weight threshold, min vertices), fit in bone-local bind pose (`bindposes`), collider objects parented to the bones so they follow animation; Bone Shape (Auto / box / sphere / capsule / convex); `ColliderEntry.OwnsGameObject` lets removal delete those bone children (and never a user object)
+- [x] Symmetric bones: Left/Right pairs by name pattern (`_L`/`_R`, `Left`/`Right`, …) get the larger size of the two
+- [x] Tests (13 new): strongest-bone threshold, per-bone capsules on a procedural 3-bone limb (radius, axis, parented, no container), colliders follow a bent bone, Auto on skinned → per bone + remove / undo, symmetrize (unit + through generation); 3 painted regions on an L regenerate identically, locked region kept, create / delete region single Undo, sub-mesh with stale triangles, brush front-face / radius, grow / connected, paint state
 
-**Done when:** painted regions regenerate identically; skinned sample gets per-bone capsules that follow animation.
+**Done when:** painted regions regenerate identically; skinned sample gets per-bone capsules that follow animation. → *Verified 2026-10-12: 134/134 tests (procedural skinned limb: capsules on bones follow a 90° elbow bend). Live on the dev-scene `Arch (static)`: Paint Colliders added a group and opened Paint mode; 3 regions (2 pillar feet → boxes, the arch → 12 convex parts) shown in the overlay list with colored tints; Regenerate reproduced all 14 colliders bit-identically.*
 
 ---
 
@@ -206,6 +206,8 @@ Tests (84 EditMode, all green, ~5 s)
 - Decomposition: split regions along the best cutting plane (better corners than fixed initial blocks)
 - Error heatmap in the Generate tab live preview (Optimize tab has it)
 - Edit tool: per-face drag preview of the error heatmap; multi-collider handles (edit several at once)
+- Paint mode: rectangle / lasso triangle select, vertex pick → collider (ECE style)
+- Per-bone: several capsules along long twist chains, ragdoll export (joints + rigidbodies)
 - Lower minimum Unity version (currently 6000.6 because of built-in Burst 2.0 / Collections 6.6 versions)
 
 ---
@@ -220,3 +222,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M2 ✅ | Burst QEM simplifier, cleaner, inflate, error metric + heatmap, Optimized Mesh strategy, Optimize tab (apply / restore), presets, 84 tests green; package 0.3.0 |
 | 2026-10-12 | M3 ✅ | Burst voxelizer, convex decomposition with greedy concavity merge, primitive replacement, Auto strategy (default), 100 tests green; package 0.4.0 |
 | 2026-10-12 | M4 ✅ | Collider edit tool + overlay, picking, handles, vertex snap, 10 operations (one Undo each), shortcuts, inspector sync; fixed Undo record ordering; 121 tests green; package 0.5.0 |
+| 2026-10-12 | M5 ✅ | Paint mode (brush, grow / connected, regions stored in the recipe, identical regenerate), per-bone colliders for skinned meshes (follow animation, L/R symmetry), Auto → per bone on skinned; 134 tests green; package 0.6.0 |

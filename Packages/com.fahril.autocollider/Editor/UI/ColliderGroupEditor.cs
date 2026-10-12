@@ -21,6 +21,7 @@ namespace AutoCollider.Editor
         private Button _removeButton;
         private ListView _list;
         private HelpBox _missingBox;
+        private Button _clearRegions;
         private int _stateHash;
 
         private ColliderGroup Group => (ColliderGroup)target;
@@ -114,6 +115,9 @@ namespace AutoCollider.Editor
             var recipeField = new PropertyField(serializedObject.FindProperty("_recipe._settings"), Strings.RecipeSettings);
             recipeField.SetEnabled(false);
             recipe.Add(recipeField);
+            _clearRegions = new Button(ClearRegions) { tooltip = Strings.ClearRegionsTooltip };
+            _clearRegions.AddToClassList("ac-button");
+            recipe.Add(_clearRegions);
             root.Add(recipe);
 
             root.RegisterCallback<AttachToPanelEvent>(_ =>
@@ -167,6 +171,10 @@ namespace AutoCollider.Editor
             var missing = Group.Entries.Count(e => e.Collider == null);
             _missingBox.text = string.Format(Strings.MissingEntries, missing);
             _missingBox.EnableInClassList("ac-hidden", missing == 0);
+
+            var regions = Group.Recipe.Regions.Count;
+            _clearRegions.text = string.Format(Strings.ClearRegions, regions);
+            _clearRegions.EnableInClassList("ac-hidden", regions == 0);
         }
 
         private int ComputeStateHash()
@@ -293,6 +301,14 @@ namespace AutoCollider.Editor
         private void RemoveGenerated()
         {
             GenerateCommands.Remove(Groups.Select(g => g.gameObject).ToList());
+        }
+
+        private void ClearRegions()
+        {
+            foreach (var group in Groups.ToList())
+                if (group.Recipe.HasRegions) ColliderOperations.ClearRegions(group);
+            ColliderEditState.Prune();
+            Refresh();
         }
 
         private void CleanUpMissing()

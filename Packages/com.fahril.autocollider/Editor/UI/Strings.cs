@@ -126,7 +126,6 @@ namespace AutoCollider.Editor
         public const string TabOptimize = "Optimize";
         public const string TabEdit = "Edit";
         public const string TabDoctor = "Doctor";
-        public const string ComingPaint = "Painting triangles into colliders arrives in milestone M5.";
         public const string ComingDoctor = "The scene validator arrives in milestone M7.";
 
         // Generate tab
@@ -164,7 +163,8 @@ namespace AutoCollider.Editor
             ColliderStrategy.ConvexHull => "A convex mesh (≤ 255 triangles) wrapped around each mesh. Works with moving Rigidbodies.",
             ColliderStrategy.OptimizedMesh => "A simplified copy of the mesh (keeps holes and concave shapes). Static or kinematic objects only — see Mesh Optimization.",
             ColliderStrategy.ConvexDecomposition => "Splits concave meshes into several convex parts (primitives where they fit). For moving Rigidbodies — see Convex Decomposition.",
-            ColliderStrategy.Auto => "Recommended. Per mesh: a primitive if one fits, else a convex hull, else convex parts (moving) or an optimized mesh (static).",
+            ColliderStrategy.Auto => "Recommended. Per mesh: a primitive if one fits, else a convex hull, else convex parts (moving) or an optimized mesh (static). Skinned meshes get per-bone colliders.",
+            ColliderStrategy.PerBone => "Skinned meshes: one collider per bone, parented to the bone so it follows the animation. Other meshes use Auto.",
             _ => string.Empty,
         };
 
@@ -235,7 +235,7 @@ namespace AutoCollider.Editor
         public const string ModeEdit = "Edit";
         public const string ModeEditTooltip = "Select and edit with handles (2).";
         public const string ModePaint = "Paint";
-        public const string ModePaintTooltip = ComingPaint;
+        public const string ModePaintTooltip = "Paint triangles on the mesh, then create colliders from them (3).";
         public const string HandleResize = "Resize";
         public const string HandleResizeTooltip = "Drag faces / radius / height (R). Alt = symmetric, hold V = snap face to a vertex.";
         public const string HandleMove = "Move";
@@ -293,10 +293,61 @@ namespace AutoCollider.Editor
         public const string UndoLock = "Auto Collider: Lock Colliders";
         public const string UndoRename = "Auto Collider: Rename Collider";
 
+        // Paint mode & regions
+        public const string PaintSummary = "{0} triangles painted";
+        public const string PaintHint = "Drag on the mesh to paint, Ctrl+drag to erase. [ / ] change the brush, Esc clears.";
+        public const string PaintBrush = "Brush";
+        public const string PaintBrushTooltip = "Brush radius in screen points ([ and ] while painting).";
+        public const string PaintAll = "All";
+        public const string PaintAllTooltip = "Paint every triangle of the selected objects' meshes.";
+        public const string PaintConnected = "Connected";
+        public const string PaintConnectedTooltip = "Extend the paint to the whole connected pieces it touches.";
+        public const string PaintGrow = "Grow";
+        public const string PaintGrowTooltip = "Extend the paint by one ring of neighbouring triangles.";
+        public const string PaintClear = "Clear";
+        public const string PaintClearTooltip = "Clear the current paint (Esc).";
+        public const string CaptionCreate = "Create";
+        public const string CreateRegionTooltip = "Make a collider from the painted triangles. It is saved as a painted region, so Regenerate rebuilds it exactly.";
+        public const string RegionsHeader = "Painted regions";
+        public const string RegionsNone = "None yet — paint triangles, then click a Create shape.";
+        public const string RegionsRegenerateNote = "With painted regions, Generate / Regenerate rebuild only the regions (and keep locked colliders).";
+        public const string RegionRow = "{0} · {1} · {2} tris";
+        public const string RegionPaint = "Paint";
+        public const string RegionPaintTooltip = "Load this region's triangles into the paint (to check it or make a new region from it).";
+        public const string RegionDeleteTooltip = "Delete this region and its colliders.";
+        public const string RegionLabel = "Region {0}";
+        public const string NotifyNothingPainted = "Paint some triangles first";
+        public const string NotifyRegionCreated = "Created {0} collider(s) from paint";
+        public const string NoteRegions = "Built from {0} painted region(s).";
+        public const string NoteBones = "{0}: {1} bone collider(s).";
+        public const string WarningRegionRendererMissing = "Painted region \"{0}\": its renderer no longer exists.";
+        public const string WarningRegionTrianglesChanged = "Painted region \"{0}\": {1} triangle(s) no longer exist (the mesh changed) — repaint it.";
+        public const string UndoCreateRegion = "Auto Collider: Create Painted Region";
+        public const string UndoDeleteRegion = "Auto Collider: Delete Painted Region";
+        public const string UndoAddGroup = "Auto Collider: Add Collider Group";
+        public const string ClearRegions = "Clear Regions ({0})";
+        public const string ClearRegionsTooltip = "Delete every painted region of this group and the colliders built from them.";
+
+        public static string PartShapeName(PartShape shape) => shape switch
+        {
+            PartShape.Box => KindBox,
+            PartShape.Sphere => KindSphere,
+            PartShape.Capsule => KindCapsule,
+            PartShape.ConvexHull => KindConvex,
+            PartShape.ConvexParts => "Parts",
+            _ => "Auto",
+        };
+
+        // Skinned meshes
+        public const string SectionSkinned = "Skinned Meshes";
+        public const string SkinnedHint = "Used by Per Bone and Auto: one collider per bone, parented to the bone so it follows the animation.";
+
         // Edit tab
         public const string EditTabIntro = "Edit generated colliders directly in the Scene view. Select an object with a Collider Group, then enter the tool.";
         public const string EditTabEnter = "Enter Collider Tool";
         public const string EditTabEnterTooltip = "Activate the collider edit tool for the selected Collider Groups.";
+        public const string EditTabPaint = "Paint Colliders";
+        public const string EditTabPaintTooltip = "Paint triangles on the selected objects and turn them into colliders (adds a Collider Group if needed).";
         public const string EditTabNoGroup = "Select an object that has a Collider Group (generate colliders first).";
         public const string EditTabGroups = "{0} Collider Group(s) selected · {1} colliders";
         public const string EditTabShortcuts = "Shortcuts";

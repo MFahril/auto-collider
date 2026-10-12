@@ -26,6 +26,17 @@ namespace AutoCollider.Editor
             }
             result.Space = space;
 
+            var context = CreateContext(target, settings, space, result);
+
+            // Painted regions are authored data: when a group has them, they define its colliders.
+            var group = target.GetComponent<ColliderGroup>();
+            if (group != null && group.Recipe.HasRegions)
+            {
+                ComputeRegions(group, settings, context, space, result);
+                if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
+                return result;
+            }
+
             var warnings = new List<string>();
             var renderers = MeshSource.CollectRenderers(target, settings, warnings);
             foreach (var w in warnings) result.Warn(w);
@@ -36,23 +47,23 @@ namespace AutoCollider.Editor
                 return result;
             }
 
-            var allowRotation = settings.AllowRotation && space.IsUniform;
-            if (settings.AllowRotation && !space.IsUniform) result.Warn(Strings.WarningNonUniformScale);
-            var isDynamic = IsDynamic(target);
-            var context = new FitContext(allowRotation, isDynamic);
-
             var strategyKind = settings.Strategy;
-            if (strategyKind == ColliderStrategy.OptimizedMesh && isDynamic)
+            if (strategyKind == ColliderStrategy.OptimizedMesh && context.IsDynamic)
             {
                 // PhysX: non-kinematic Rigidbodies cannot use concave mesh colliders.
                 result.Warn(Strings.WarningDynamicConcave);
                 strategyKind = ColliderStrategy.ConvexHull;
             }
-            var strategy = StrategyRegistry.Get(strategyKind, settings);
+
+            // Skinned meshes get per-bone colliders (Per Bone, and Auto); everything else uses the mesh strategy
+            // (Auto when Per Bone was chosen for a non-skinned mesh).
+            var perBone = strategyKind == ColliderStrategy.PerBone || strategyKind == ColliderStrategy.Auto;
+            var strategy = StrategyRegistry.Get(strategyKind == ColliderStrategy.PerBone ? ColliderStrategy.Auto : strategyKind, settings);
 
             var parts = new List<MeshGeometry>(renderers.Count);
             foreach (var renderer in renderers)
             {
+                if (perBone && renderer is SkinnedMeshRenderer skinned && TryFitBones(skinned, settings, result)) continue;
                 try
                 {
                     var geometry = MeshSource.Read(renderer, space);
@@ -89,6 +100,93 @@ namespace AutoCollider.Editor
 
             if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
             return result;
+        }
+
+        /// <summary>Fit options for a target (rotation needs uniform scale; Rigidbody makes it dynamic).</summary>
+        public static FitContext CreateContext(GameObject target, GenerationSettings settings, in TargetSpace space, TargetResult result = null)
+        {
+            var allowRotation = settings.AllowRotation && space.IsUniform;
+            if (settings.AllowRotation && !space.IsUniform) result?.Warn(Strings.WarningNonUniformScale);
+            return new FitContext(allowRotation, IsDynamic(target));
+        }
+
+        private static void ComputeRegions(ColliderGroup group, GenerationSettings settings, FitContext context, in TargetSpace space,
+            TargetResult result)
+        {
+            var geometryCache = new Dictionary<Renderer, MeshGeometry>();
+            foreach (var region in group.Recipe.Regions)
+            {
+                if (region.Renderer == null)
+                {
+                    result.Warn(string.Format(Strings.WarningRegionRendererMissing, region.Label));
+                    continue;
+                }
+                if (!geometryCache.TryGetValue(region.Renderer, out var geometry))
+                {
+                    geometry = MeshSource.Read(region.Renderer, space);
+                    geometryCache[region.Renderer] = geometry;
+                    result.SourceTriangles += geometry.TriangleCount;
+                }
+
+                var shapes = RegionFitter.Fit(region, geometry, settings, context, out var invalid);
+                if (invalid > 0) result.Warn(string.Format(Strings.WarningRegionTrianglesChanged, region.Label, invalid));
+                result.Shapes.AddRange(shapes);
+            }
+            result.RendererCount = geometryCache.Count;
+            result.Notes.Add(string.Format(Strings.NoteRegions, group.Recipe.Regions.Count));
+        }
+
+        /// <summary>
+        /// Per-bone colliders for a skinned mesh, parented to its bones. False when the mesh has no usable skinning data
+        /// (the caller then fits the baked mesh instead).
+        /// </summary>
+        private static bool TryFitBones(SkinnedMeshRenderer skinned, GenerationSettings settings, TargetResult result)
+        {
+            var mesh = skinned.sharedMesh;
+            var bones = skinned.bones;
+            if (mesh == null || bones == null || bones.Length == 0) return false;
+
+            BoneWeight[] weights;
+            Matrix4x4[] bindposes;
+            Vector3[] vertices;
+            try
+            {
+                weights = mesh.boneWeights;
+                bindposes = mesh.bindposes;
+                vertices = mesh.vertices;
+            }
+            catch (Exception e)
+            {
+                result.Warn(string.Format(Strings.WarningMeshReadFailed, skinned.name, e.Message));
+                return false;
+            }
+            if (weights.Length != vertices.Length || bindposes.Length != bones.Length) return false;
+
+            var points = new Unity.Mathematics.float3[vertices.Length];
+            for (var i = 0; i < points.Length; i++) points[i] = vertices[i];
+            var poses = new Unity.Mathematics.float4x4[bindposes.Length];
+            for (var i = 0; i < poses.Length; i++) poses[i] = bindposes[i];
+
+            var fits = BoneFitter.Fit(points, BoneFitter.StrongestBones(weights, settings.BoneWeightThreshold), poses,
+                settings.BoneShape, settings.MinBoneVertices);
+            var named = new List<(string, FittedShape)>();
+            foreach (var fit in fits)
+            {
+                var bone = bones[fit.Bone];
+                if (bone == null) continue;
+                var shape = fit.Shape;
+                shape.Parent = bone;
+                shape.Label = bone.name;
+                InflateDeflate.Apply(shape, settings.Inflate);
+                named.Add((bone.name, shape));
+                result.Shapes.Add(shape);
+            }
+            if (named.Count == 0) return false;
+
+            if (settings.SymmetricBones) BoneFitter.Symmetrize(named);
+            result.SourceTriangles += mesh.triangles.Length / 3;
+            result.Notes.Add(string.Format(Strings.NoteBones, skinned.name, named.Count));
+            return true;
         }
 
         private static void MeasureMesh(FittedShape shape, MeshGeometry source)

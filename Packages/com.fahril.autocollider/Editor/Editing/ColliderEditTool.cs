@@ -65,10 +65,14 @@ namespace AutoCollider.Editor
         {
             ColliderEditState.Prune();
             ClearSnapCache();
-            SceneView.RepaintAll();
+            ColliderEditState.NotifyChanged(); // region lists and entries may have changed
         }
 
-        private void ClearSnapCache() => _snapVertices.Clear();
+        private void ClearSnapCache()
+        {
+            _snapVertices.Clear();
+            PaintMeshCache.Clear();
+        }
 
         public override void OnToolGUI(EditorWindow window)
         {
@@ -79,14 +83,99 @@ namespace AutoCollider.Editor
             HandleCommands(e, view, groups);
             if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
             {
-                if (ColliderEditState.Selected.Count > 0) ColliderEditState.ClearSelection();
+                if (ColliderEditState.Mode == ColliderToolMode.Paint && ColliderEditState.PaintedCount > 0) ColliderEditState.ClearPaint();
+                else if (ColliderEditState.Selected.Count > 0) ColliderEditState.ClearSelection();
                 else ColliderToolCommands.ExitTool();
                 e.Use();
             }
 
             if (e.type == EventType.Repaint) DrawColliders(groups);
+
+            if (ColliderEditState.Mode == ColliderToolMode.Paint)
+            {
+                HandlePainting(e, view, groups);
+                return;
+            }
             if (ColliderEditState.Mode == ColliderToolMode.Edit) DrawActiveHandles(groups);
             HandlePicking(e, groups);
+        }
+
+        // ---------- Painting ----------
+
+        private bool _brushHit;
+        private Vector3 _brushPoint;
+        private float _brushWorldRadius;
+
+        private void HandlePainting(Event e, SceneView view, List<ColliderGroup> groups)
+        {
+            var id = GUIUtility.GetControlID(PickHint, FocusType.Passive);
+            switch (e.GetTypeForControl(id))
+            {
+                case EventType.Layout:
+                    HandleUtility.AddDefaultControl(id);
+                    break;
+
+                case EventType.MouseMove:
+                    UpdateBrush(e.mousePosition, view, groups);
+                    HandleUtility.Repaint();
+                    break;
+
+                case EventType.MouseDown when e.button == 0 && !e.alt && HandleUtility.nearestControl == id:
+                    GUIUtility.hotControl = id;
+                    PaintAt(e.mousePosition, view, groups, EditorGUI.actionKey);
+                    e.Use();
+                    break;
+
+                case EventType.MouseDrag when GUIUtility.hotControl == id:
+                    PaintAt(e.mousePosition, view, groups, EditorGUI.actionKey);
+                    e.Use();
+                    break;
+
+                case EventType.MouseUp when GUIUtility.hotControl == id:
+                    GUIUtility.hotControl = 0;
+                    e.Use();
+                    break;
+
+                case EventType.Repaint:
+                    PaintDrawing.DrawRegions(groups);
+                    PaintDrawing.DrawPainted();
+                    if (_brushHit) PaintDrawing.DrawBrush(_brushPoint, view.camera.transform.forward, _brushWorldRadius, EditorGUI.actionKey);
+                    break;
+            }
+        }
+
+        private void PaintAt(Vector2 mouse, SceneView view, List<ColliderGroup> groups, bool erase)
+        {
+            UpdateBrush(mouse, view, groups);
+            if (!_brushHit) return;
+
+            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            var hits = PaintMesh.Brush(PaintMeshCache.For(groups), ray, view.camera.transform.position, mouse,
+                ColliderEditState.BrushRadius, _brushWorldRadius * 1.5f, HandleUtility.WorldToGUIPoint);
+            foreach (var byMesh in hits.GroupBy(h => h.mesh))
+                ColliderEditState.Paint(byMesh.Key.Renderer, byMesh.Select(h => h.triangle), erase);
+        }
+
+        /// <summary>Where the brush touches the surface, and its radius in world units there.</summary>
+        private void UpdateBrush(Vector2 mouse, SceneView view, List<ColliderGroup> groups)
+        {
+            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            _brushHit = false;
+            var nearest = float.MaxValue;
+            foreach (var mesh in PaintMeshCache.For(groups))
+                if (mesh.Raycast(ray, out _, out var d) && d < nearest)
+                {
+                    nearest = d;
+                    _brushHit = true;
+                }
+            if (!_brushHit) return;
+
+            _brushPoint = ray.GetPoint(nearest);
+            var camera = view.camera;
+            var worldPerPixel = camera.orthographic
+                ? 2f * camera.orthographicSize / camera.pixelHeight
+                : 2f * Vector3.Distance(camera.transform.position, _brushPoint) * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) / camera.pixelHeight;
+            _brushWorldRadius = ColliderEditState.BrushRadius * EditorGUIUtility.pixelsPerPoint * worldPerPixel;
         }
 
         // ---------- Drawing ----------

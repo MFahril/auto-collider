@@ -39,20 +39,28 @@ namespace AutoCollider.Editor
             RecordGroup(group, Strings.UndoGenerate);
             group.RemoveMissing();
 
-            var container = EnsureContainer(group);
+            // A locked collider built from a painted region replaces that region's regenerated colliders.
+            var lockedRegions = new HashSet<int>();
+            foreach (var entry in group.Entries)
+                if (entry.Locked && group.Recipe.IsRegionId(entry.PartId)) lockedRegions.Add(entry.PartId);
+
             var space = result.Space;
             var libraryName = target.name;
 
             for (var i = 0; i < result.Shapes.Count; i++)
             {
                 var shape = result.Shapes[i];
+                if (shape.RegionId >= 0 && lockedRegions.Contains(shape.RegionId)) continue;
+
+                var container = shape.Parent != null ? null : EnsureContainer(group);
                 var collider = CreateCollider(shape, container, space, libraryName);
                 if (collider == null) continue;
 
                 if (!(collider is MeshCollider { convex: false })) collider.isTrigger = settings.IsTrigger;
                 collider.sharedMaterial = settings.Material;
                 RecordGroup(group, Strings.UndoGenerate);
-                group.AddEntry(new ColliderEntry(collider, shape.Label, i, generated: true));
+                var partId = shape.RegionId >= 0 ? shape.RegionId : i;
+                group.AddEntry(new ColliderEntry(collider, shape.Label, partId, generated: true, OwnsHost(collider, group)));
                 result.CollidersCreated++;
             }
 
@@ -69,7 +77,7 @@ namespace AutoCollider.Editor
         /// </summary>
         public ColliderEntry AddShape(ColliderGroup group, FittedShape shape, in TargetSpace space, Collider template = null)
         {
-            var container = EnsureContainer(group);
+            var container = shape.Parent != null ? null : EnsureContainer(group);
             var collider = CreateCollider(shape, container, space, group.name);
             if (collider == null) return null;
 
@@ -80,7 +88,7 @@ namespace AutoCollider.Editor
                 collider.sharedMaterial = template.sharedMaterial;
             }
 
-            var entry = new ColliderEntry(collider, shape.Label, -1, generated: true);
+            var entry = new ColliderEntry(collider, shape.Label, shape.RegionId, generated: true, OwnsHost(collider, group));
             RecordGroup(group, Strings.UndoEditCollider);
             group.AddEntry(entry);
             EditorUtility.SetDirty(group);
@@ -109,8 +117,14 @@ namespace AutoCollider.Editor
             return removed;
         }
 
+        /// <summary>True when the collider got a GameObject of its own (not the shared container).</summary>
+        internal static bool OwnsHost(Collider collider, ColliderGroup group) =>
+            collider != null && collider.transform != group.Container && collider.transform != group.transform;
+
         internal Collider CreateCollider(FittedShape shape, Transform container, in TargetSpace space, string libraryName)
         {
+            if (shape.Parent != null) return CreateParentedCollider(shape, libraryName);
+
             // Rotation is only produced for uniformly scaled targets, so dividing by any scale component is exact.
             var host = container.gameObject;
             var center = space.ToLocalPoint(shape.Center);
@@ -171,6 +185,52 @@ namespace AutoCollider.Editor
             }
         }
 
+        /// <summary>
+        /// Bone colliders: a child of the bone at the shape's pose (bone-local space), sizes in bone-local units,
+        /// so the collider follows the animation with no runtime code.
+        /// </summary>
+        private Collider CreateParentedCollider(FittedShape shape, string libraryName)
+        {
+            var host = CreateChild(shape.Parent, shape.Label);
+            var isMesh = shape.IsMesh;
+            host.transform.localPosition = isMesh ? Vector3.zero : (Vector3)(float3)shape.Center;
+            host.transform.localRotation = isMesh ? Quaternion.identity : (Quaternion)shape.Rotation;
+
+            switch (shape.Kind)
+            {
+                case ShapeKind.Box:
+                {
+                    var box = Undo.AddComponent<BoxCollider>(host);
+                    box.size = shape.Size;
+                    return box;
+                }
+                case ShapeKind.Sphere:
+                {
+                    var sphere = Undo.AddComponent<SphereCollider>(host);
+                    sphere.radius = shape.Radius;
+                    return sphere;
+                }
+                case ShapeKind.Capsule:
+                {
+                    var capsule = Undo.AddComponent<CapsuleCollider>(host);
+                    capsule.direction = shape.Direction;
+                    capsule.radius = shape.Radius;
+                    capsule.height = shape.Height;
+                    return capsule;
+                }
+                default:
+                {
+                    var source = shape.MeshVertices;
+                    var vertices = new Vector3[source.Length];
+                    for (var v = 0; v < vertices.Length; v++) vertices[v] = source[v];
+                    var meshCollider = Undo.AddComponent<MeshCollider>(host);
+                    meshCollider.sharedMesh = _meshStore.GetOrCreate(libraryName, shape.Label, vertices, shape.MeshTriangles);
+                    meshCollider.convex = true;
+                    return meshCollider;
+                }
+            }
+        }
+
         internal Transform EnsureContainer(ColliderGroup group)
         {
             if (group.Container != null) return group.Container;
@@ -196,12 +256,12 @@ namespace AutoCollider.Editor
             EditorUtility.SetDirty(group);
         }
 
-        private static GameObject CreateChild(Transform container, string name)
+        private static GameObject CreateChild(Transform parent, string name)
         {
             var go = new GameObject(string.IsNullOrEmpty(name) ? "Collider" : name);
-            go.transform.SetParent(container, false);
-            go.layer = container.gameObject.layer;
-            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(container.gameObject));
+            go.transform.SetParent(parent, false);
+            go.layer = parent.gameObject.layer;
+            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(parent.gameObject));
             Undo.RegisterCreatedObjectUndo(go, Strings.UndoGenerate);
             return go;
         }
@@ -218,7 +278,7 @@ namespace AutoCollider.Editor
                 // Change the group first (recorded), then destroy — the destroy would flush an earlier record.
                 RecordGroup(group, Strings.UndoRemove);
                 group.RemoveEntry(entry);
-                if (DestroyCollider(entry.Collider, group.Container)) removed++;
+                if (DestroyEntryCollider(entry, group.Container)) removed++;
             }
             return removed;
         }
@@ -247,6 +307,19 @@ namespace AutoCollider.Editor
             if (container != null && go != null && go.transform != container
                 && go.transform.IsChildOf(container) && IsDisposableObject(go))
                 Undo.DestroyObjectImmediate(go);
+            return true;
+        }
+
+        /// <summary>Destroy an entry's collider, and its GameObject when Auto Collider created that object for it (e.g. under a bone).</summary>
+        internal static bool DestroyEntryCollider(ColliderEntry entry, Transform container)
+        {
+            var collider = entry.Collider;
+            if (collider == null) return false;
+            var go = collider.gameObject;
+            if (!entry.OwnsGameObject) return DestroyCollider(collider, container);
+
+            Undo.DestroyObjectImmediate(collider);
+            if (go != null && IsDisposableObject(go)) Undo.DestroyObjectImmediate(go);
             return true;
         }
 

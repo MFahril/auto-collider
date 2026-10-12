@@ -413,3 +413,30 @@
 .ac-overlay Toggle {
     margin: 1px var(--ac-spacing-s) 1px var(--ac-spacing-xs);
 }
+
+/* ---------- Paint mode ---------- */
+
+.ac-overlay__brush {
+    margin: var(--ac-spacing-xs) 1px;
+}
+
+.ac-overlay__regions {
+    margin: var(--ac-spacing-xs) 0;
+}
+
+.ac-overlay__swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin: 0 var(--ac-spacing-s) 0 var(--ac-spacing-xs);
+    align-self: center;
+}
+
+.ac-overlay__region-label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -unity-text-align: middle-left;
+}

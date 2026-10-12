@@ -40,7 +40,8 @@ namespace AutoCollider.Editor
                 var t = result.Target.transform;
                 var scaledToWorld = Matrix4x4.TRS(t.position, t.rotation, Vector3.one);
                 foreach (var shape in result.Shapes)
-                    ShapeDrawing.Draw(shape, scaledToWorld, ShapeDrawing.ColorFor(shape.Kind, settings));
+                    ShapeDrawing.Draw(shape, shape.Parent != null ? shape.Parent.localToWorldMatrix : scaledToWorld,
+                        ShapeDrawing.ColorFor(shape.Kind, settings));
             }
         }
     }

@@ -35,6 +35,7 @@ Packages/com.fahril.autocollider/
   Runtime/                     AutoCollider.Runtime  (NO UnityEditor)
     ColliderGroup.cs           multi-collider "bridge" (ownership, bulk API, events)
     ColliderEntry.cs, GenerationRecipe.cs, GenerationSettings.cs (+ strategy/granularity/replace enums), PhysicsLimits.cs
+    PaintedRegion.cs, PartShape.cs  painted parts stored in the recipe (ids ≥ 10000 = entry PartId)
     ColliderRelay.cs           forwards callbacks from child collider GOs to the group
     AnimatedMeshCollider.cs    runtime skinned/blendshape collider refresh
     ColliderLodFollower.cs
@@ -44,10 +45,12 @@ Packages/com.fahril.autocollider/
     Core/                      MeshSource, MeshGeometry, TargetSpace, Fitting/ (box/sphere/capsule), QuickHull3D (pure math)
     Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer,
                                Voxelizer (Burst), ConvexDecomposer, PrimitiveReplacer, stats
-    Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store
+    Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store,
+                               RegionFitter (painted region → shapes, shared by paint tool + pipeline), BoneFitter (per-bone)
     Editing/                   ColliderEditTool (EditorTool), ColliderOverlay, ColliderOperations (one Undo step each),
                                ColliderShapes (collider ↔ shape), ColliderPicker, ColliderEditState, ColliderDrawing,
-                               VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer
+                               VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer,
+                               PaintMesh (+ PaintMeshCache: world mesh, raycast, brush, grow), PaintDrawing (GL region tints)
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
     Doctor/                    scene validator
   Tests/Editor/                EditMode tests
@@ -75,7 +78,7 @@ Assets/Sample Model/           (empty) place real test models here
    One user action = **one Undo group** (`Undo.IncrementCurrentGroup` + `Undo.SetCurrentGroupName` + `Undo.CollapseUndoOperations`). Batch over 100 objects is still one Ctrl+Z.
    **Record right before you modify.** Any other Undo call (`AddComponent`, `RegisterCreatedObjectUndo`, `DestroyObjectImmediate`) flushes pending `RecordObject`s — a record taken *before* such a call captures "no change" and the later edit is silently lost on undo. Use `ColliderWriter.RecordGroup(group, …)` immediately before every `ColliderGroup` change, and change the group *before* destroying what it referenced.
    Tests that check undo must assert the restored state (entries, references) — after undoing a destroy, compare objects with Unity `==` (the C# wrapper is new), not `Is.SameAs`.
-5. **Only delete colliders we own** (registered in `ColliderGroup` with `generated == true`). Never wipe user-authored colliders unless the user explicitly picks "Replace existing colliders".
+5. **Only delete colliders we own** (registered in `ColliderGroup` with `generated == true`). Never wipe user-authored colliders unless the user explicitly picks "Replace existing colliders". Delete a collider's **GameObject** only when `ColliderEntry.OwnsGameObject` is set (we created it — container children, bone children); remove through `ColliderWriter.DestroyEntryCollider`.
 6. Never silently change a user's **tag, layer, static flags, or transform**. Layer/tag assignment is opt-in and applies to generated collider objects only.
 7. Prefabs: modify instances with `PrefabUtility.RecordPrefabInstancePropertyModifications`; modify prefab assets with `PrefabUtility.LoadPrefabContents` → edit → `SaveAsPrefabAsset` → `UnloadPrefabContents`. Never edit a prefab asset through a scene instance by accident.
 8. Mark scenes dirty only through Undo / `EditorSceneManager.MarkSceneDirty` — never leave changes unsaved-but-invisible.
@@ -130,6 +133,8 @@ Use this when designing fitters, writers, and validators.
 **Skinned meshes**
 - `BakeMesh` gives the current pose (accurate, expensive). `sharedMesh` gives bind pose (cheap, wrong when animated).
 - Per-bone colliders: assign vertices to the bone with the highest weight, fit in bone-local space, parent collider GO to the bone → follows animation for free.
+  Bone-local bind pose = `mesh.bindposes[b].MultiplyPoint(sharedMesh vertex)` — no bake needed. Such shapes carry `FittedShape.Parent` (parent-local, not scaled space).
+- Painted triangle indices refer to the triangles `MeshSource` reads (unreferenced vertices dropped, submeshes concatenated) — read through `MeshSource`, never `mesh.triangles`, wherever indices are stored or matched.
 - Runtime MeshCollider refresh is expensive; throttle (`EveryNFrames` / `TargetHz`), only when visible, never with convex decomposition.
 
 **LODs**

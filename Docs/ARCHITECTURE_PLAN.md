@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M4 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M5 done** — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -173,18 +173,25 @@ internal sealed class FittedShape {
     public int Direction;            // capsule axis 0/1/2
     public ConvexHull Hull;          // convex mesh data (≤ 255 triangles)
     public float Volume;             // used to compare fits
+    public Transform Parent;         // M5: set → shape is in this transform's local space (bone colliders)
+    public int RegionId = -1;        // M5: painted region that produced it
 }
 
 // Runtime — serialized on ColliderGroup
 [Serializable] public sealed class ColliderEntry {      // private serialized fields, public getters
-    Collider Collider; string Label; int PartId;         // PartId: producing part (-1 = manual)
+    Collider Collider; string Label; int PartId;         // PartId: producing part (-1 = manual, ≥ 10000 = painted region)
+    bool OwnsGameObject;                                 // GO was created by us (child of container / bone) → removal deletes it
     bool Generated;                                      // ownership → only these are ever deleted by the tool
     bool Locked;                                         // regenerate / remove skip locked entries
 }
 
 [Serializable] public sealed class GenerationRecipe {
     GenerationSettings Settings;                         // exact settings used → Regenerate
-    // M5: List<PaintedRegion> Regions (triangle indices + ShapeKind per region, Technie-style)
+    List<PaintedRegion> Regions;                         // M5: Technie-style painted parts (see 5.5)
+}
+
+[Serializable] public sealed class PaintedRegion {     // id ≥ 10000 = PartId of its colliders
+    int Id; string Label; Renderer Renderer; int[] Triangles; PartShape Shape;   // Auto/Box/Sphere/Capsule/ConvexHull/ConvexParts
 }
 ```
 
@@ -248,7 +255,7 @@ See §6 for algorithm detail. Components:
   | `ConvexHull` ✅ | one convex mesh (≤ 255 triangles); flat geometry falls back to a box |
   | `OptimizedMesh` ✅ | simplified concave MeshCollider (static / kinematic only; dynamic Rigidbody → convex hull + warning) |
   | `ConvexDecomposition` ✅ | N convex parts (+ primitive replacement); stats for the whole set |
-  | `PerBone` | skinned: one shape per bone, parented to the bone |
+  | `PerBone` ✅ | skinned: one shape per bone, parented to the bone (§6.4); Auto uses it for skinned meshes |
   | **`Auto`** ✅ (default) | picks per mesh: primitive → hull → decomposition / optimized mesh (see §6.5) |
 - **`GenerationPipeline`**: `Plan` (collect targets, read meshes) → `Compute` (strategies, pure data) → `Preview` (draw ghosts, no scene change) → `Apply` (`ColliderWriter`).
 - **`BatchProcessor`**: targets = Hierarchy selection (scene objects; prefab instances become overrides). Project-window prefab/model assets: backlog. Options: include children, filters (name regex, layer mask, min bounds size, renderer enabled, LOD0 only, skip objects already having user colliders). Cancelable progress; **single Undo group**; per-object status (OK / Skipped(reason) / Warning) shown in the window.
@@ -289,7 +296,7 @@ public class ColliderGroup : MonoBehaviour {
 
 ### 5.5 Scene editing (criterion 4)
 
-*Implemented in M4 (Paint mode: M5).*
+*Implemented in M4 (Paint mode in M5).*
 
 **`ColliderEditTool : EditorTool`** — a component tool for `ColliderGroup` (in the Tools overlay when a group is selected; "Edit in Scene" in the inspector and the window's Edit tab activate it). Its targets are the selected groups, so the tool never changes Unity's `Selection`; collider selection lives in **`ColliderEditState`** (editor-only: selection, mode, handle mode, hide / solo, X-ray, labels). Paired **`ColliderOverlay`** (transient UI Toolkit overlay, visible only while the tool is active).
 
@@ -297,7 +304,7 @@ public class ColliderGroup : MonoBehaviour {
 |---|---|
 | **Select** (1) | Click colliders (exact `Collider.Raycast` per candidate; repeat-click cycles through overlaps), drag a rectangle to box-select (projected bounds centers), Shift add / Ctrl toggle, click empty to clear. A default control keeps clicks from reaching Unity's object picking. |
 | **Edit** (2) | Same picking + handles on the active collider: **Resize** (R) — Unity bounds handles drawn in the shape's own frame (face drag, Alt symmetric, Ctrl snap; sphere radius; capsule radius + height); **Move** (W) / **Rotate** (E) — position / rotation handles. Hold **V** to snap the dragged face (or the moved center) to the source-mesh vertex under the mouse. |
-| **Paint** (M5) | Brush/box-select triangles on the source mesh → create collider from selection; saved as `PaintedRegion`s in the recipe. |
+| **Paint** (3) | Brush triangles on the source meshes → create a collider from them; saved as `PaintedRegion`s in the recipe (see *Painted regions* below). |
 
 **Shapes ↔ colliders (`ColliderShapes`).** Every edit converts the live collider to a `FittedShape` in the group's world-sized frame (exact round trip incl. non-uniform scale), edits the shape, and writes it back with `ColliderOperations.Apply`: in place when the collider can express it (on the shared container when unrotated, or on its own child), otherwise rebuilt with the **same entry** re-pointed (e.g. rotating a box that lives on the container moves it onto its own child; mesh colliders `DetachToChild` — same mesh asset — before moving / rotating). Under non-uniform scale rotated primitives are refit axis-aligned (`EnsureRepresentable`) because a rotated child would shear.
 
@@ -307,7 +314,13 @@ public class ColliderGroup : MonoBehaviour {
 
 **Visuals (`ColliderDrawing`):** per-type color, selection color + stronger fill, translucent fill (pushed out 0.2 % against z-fighting), X-ray (faded lines through geometry), labels (🔒 when locked), disabled colliders dimmed; mesh collider edges cached per mesh.
 
-**Shortcuts:** an `IShortcutContext` registered while the tool is active (rebindable in Edit ▸ Shortcuts ▸ Auto Collider): `1/2` mode, `W/E/R` handles, `V` (hold) vertex snap, `Ctrl+D` duplicate, `Del` delete, `M` mirror X, `G` merge → convex, `L` lock, `H` solo, `Shift+H` hide, `Alt+H` show all, `X` X-ray; `Esc` clears the selection, then exits. Edit-menu commands (Duplicate, Delete, Frame Selected, Select All) act on colliders while the tool is active.
+**Painted regions (M5, Technie-style).** `GameObject ▸ Auto Collider ▸ Paint Colliders` (or the window's Edit tab) adds a `ColliderGroup` if needed and opens Paint mode.
+- *Brush:* `PaintMesh` holds each renderer's mesh in world space (read through `MeshSource` in the group's space, so painted indices are the same triangles the pipeline reads; rebuilt by `PaintMeshCache` when the renderer moves). The brush paints every **front-facing** triangle whose centroid lies within the screen radius and within a depth tolerance of the Möller–Trumbore hit, so it doesn't bleed through to the back. Ctrl+drag erases, `[` / `]` resize, Esc clears. *All / Connected / Grow* use welded-vertex adjacency.
+- *Create:* Auto / Box / Sphere / Capsule / Convex / Parts → `ColliderOperations.CreateRegions` (one Undo step) stores a `PaintedRegion` per renderer and writes its colliders tagged with the region id. Fitting goes through **`RegionFitter`**, which the pipeline also uses — so creating and regenerating give identical colliders.
+- *Regenerate:* a group with regions rebuilds **only** its regions (+ locked colliders); a locked collider of a region suppresses that region. Missing renderers / triangle indices beyond the current mesh produce warnings.
+- *Drawing:* `PaintDrawing` tints painted triangles and each region (palette per region id) with GL triangles lifted slightly along the normal, plus the brush disc.
+
+**Shortcuts:** an `IShortcutContext` registered while the tool is active (rebindable in Edit ▸ Shortcuts ▸ Auto Collider): `1/2/3` mode, `[` / `]` brush size, `W/E/R` handles, `V` (hold) vertex snap, `Ctrl+D` duplicate, `Del` delete, `M` mirror X, `G` merge → convex, `L` lock, `H` solo, `Shift+H` hide, `Alt+H` show all, `X` X-ray; `Esc` clears the selection, then exits. Edit-menu commands (Duplicate, Delete, Frame Selected, Select All) act on colliders while the tool is active.
 
 ### 5.6 UI (criterion 1)
 
@@ -391,7 +404,15 @@ Known limit: initial blocks don't align with the shape's features, so an inner c
 
 ### 6.4 Per-bone (skinned)
 
-Assign each vertex to its highest-weight bone (threshold), skip bones with < N verts, fit chosen shape in **bone-local** space (capsule default along the bone direction), parent collider GO to the bone. Optional: mirror left/right by name pattern (`_L/_R`, `Left/Right`).
+*Implemented in M5 (`BoneFitter`, `GenerationPipeline.TryFitBones`).*
+
+1. Read the shared mesh (bind pose — no `BakeMesh` needed) with `boneWeights` and `bindposes`.
+2. `StrongestBones`: each vertex goes to its highest-weight bone if that weight ≥ `Bone Weight Threshold` (0.5); bones with < `Min Bone Vertices` (12) are skipped.
+3. Transform the bone's vertices by `bindposes[bone]` → **bone-local** space and fit `Bone Shape` (capsule default, rotation allowed so it runs along the bone; Auto = best primitive by fill ratio, capsule fallback; convex shapes → hull).
+4. The `FittedShape` carries `Parent = bone`; `ColliderWriter` puts the collider on a new child of the bone (`ColliderEntry.OwnsGameObject = true`) — the collider follows animation with no runtime cost, and removal deletes exactly those children.
+5. `Symmetric Bones`: Left/Right pairs by name (`_L`/`_R`, `.L`/`.R`, `Left`/`Right` — same rules as Mirror) take the larger radius / height / size of the two.
+
+Auto picks this for every `SkinnedMeshRenderer` with bone weights; meshes without weights fall back to the normal path.
 
 ### 6.5 Auto strategy heuristic
 
@@ -405,7 +426,7 @@ convexity = solid volume ÷ hull volume
 if convexity ≥ ConvexityThreshold (0.85)  → ConvexHull
 else if moved by a non-kinematic Rigidbody → ConvexDecomposition
 else                                       → OptimizedMesh
-(M5: skinned meshes → PerBone)
+skinned meshes (SkinnedMeshRenderer) → PerBone, before any of the above (M5)
 ```
 Both thresholds are `GenerationSettings` fields (so presets carry them). Auto adds a note per mesh ("Auto → Capsule.") shown in the window's result details and status tooltips.
 
@@ -447,7 +468,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M2** Optimization ✅ | `ClusterSimplifier` (Burst, QEM), `MeshCleaner`, `InflateDeflate`, `OptimizedMesh` strategy, stats, presets (4 built-in + save), Optimize tab, heatmap | Sample mesh tris −80% at Balanced with max error under threshold; deterministic |
 | **M3** Decomposition ✅ | Voxelizer, `ConvexDecomposer` + greedy merge, 256 guard, `PrimitiveReplacer`, `Auto` strategy | Dynamic sample objects get convex parts all ≤255 faces; Auto picks sensible types on sample scene |
 | **M4** Scene editing ✅ | `ColliderEditTool`, `ColliderOverlay`, picking, shape handles, move/rotate, vertex snap, ops (dup/delete/mirror/merge/convert/refit/lock/solo), shortcuts, inspector list sync | All ops Undo-able; edit a box face by drag; mirror works on rotated children |
-| **M5** Paint & skinned | Paint mode (brush/box triangle select), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
+| **M5** Paint & skinned ✅ | Paint mode (brush triangle select, grow / connected), create-from-selection, `PaintedRegion` in recipe + regenerate, `PerBone` strategy + mirror L/R | Paint 3 regions → regenerate reproduces same colliders; skinned sample gets per-bone capsules that follow animation |
 | **M6** Runtime | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
 | **M7** Polish | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |
 

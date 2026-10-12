@@ -17,7 +17,9 @@ namespace AutoCollider
         OptimizedMesh = 5,
         /// <summary>Several convex parts (hulls, or primitives where they fit) — concave shapes on moving Rigidbodies.</summary>
         ConvexDecomposition = 6,
-        /// <summary>Picks the cheapest strategy that fits each mesh (primitive → hull → decomposition / optimized mesh).</summary>
+        /// <summary>Picks the cheapest strategy that fits each mesh (primitive → hull → decomposition / optimized mesh); skinned meshes get per-bone colliders.</summary>
         Auto = 7,
+        /// <summary>Skinned meshes: one collider per bone, parented to the bone so it follows the animation.</summary>
+        PerBone = 8,
     }
 }

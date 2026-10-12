@@ -53,6 +53,15 @@ namespace AutoCollider.Editor
         /// <summary>Optional user-facing note from the strategy (e.g. "Auto chose Convex Hull").</summary>
         public string Note;
 
+        /// <summary>
+        /// When set (bone colliders), the shape is expressed in this transform's <b>local</b> space and the collider is created
+        /// on its own child of it, so it follows the bone. Otherwise the shape is in the target's scaled space.
+        /// </summary>
+        public UnityEngine.Transform Parent;
+
+        /// <summary>The painted region this shape was built from (its entry's PartId), or -1.</summary>
+        public int RegionId = -1;
+
         public bool IsRotated => !GeometryUtils.IsNearIdentity(Rotation);
 
         public bool IsMesh => Kind == ShapeKind.ConvexMesh || Kind == ShapeKind.ConcaveMesh;

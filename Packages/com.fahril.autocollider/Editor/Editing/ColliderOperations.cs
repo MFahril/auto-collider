@@ -44,25 +44,29 @@ namespace AutoCollider.Editor
             var onContainer = collider.transform == group.Container;
             if (!dedicated && !(onContainer && !shape.IsRotated)) return false;
 
-            var scale = math.abs(space.Scale);
-            var uniform = scale.x;
-            var center = space.ToLocalPoint(shape.Center);
             var t = collider.transform;
-
+            float3 center;
             if (dedicated)
             {
+                // Its own object (under the container or a bone): set the world pose; the collider sits at its origin.
                 Undo.RecordObject(t, undoName);
-                t.localPosition = center;
-                t.localRotation = shape.Rotation;
+                t.SetPositionAndRotation(ColliderShapes.ToWorld(space, shape.Center),
+                    group.transform.rotation * (Quaternion)shape.Rotation);
                 center = float3.zero;
             }
+            else
+            {
+                center = space.ToLocalPoint(shape.Center);
+            }
 
+            // The collider's own lossy scale converts world-sized shape values back to its local units.
+            var scale = math.abs((float3)t.lossyScale);
             switch (collider)
             {
                 case BoxCollider box when shape.Kind == ShapeKind.Box:
                     Undo.RecordObject(box, undoName);
                     box.center = center;
-                    box.size = dedicated && shape.IsRotated ? shape.Size / uniform : space.ToLocalSize(shape.Size);
+                    box.size = shape.Size / scale;
                     return true;
                 case SphereCollider sphere when shape.Kind == ShapeKind.Sphere:
                     Undo.RecordObject(sphere, undoName);
@@ -72,12 +76,11 @@ namespace AutoCollider.Editor
                 case CapsuleCollider capsule when shape.Kind == ShapeKind.Capsule:
                 {
                     var d = shape.Direction;
-                    var rotated = dedicated && shape.IsRotated;
                     Undo.RecordObject(capsule, undoName);
                     capsule.center = center;
                     capsule.direction = d;
-                    capsule.radius = shape.Radius / (rotated ? uniform : math.max(scale[(d + 1) % 3], scale[(d + 2) % 3]));
-                    capsule.height = shape.Height / (rotated ? uniform : scale[d]);
+                    capsule.radius = shape.Radius / math.max(scale[(d + 1) % 3], scale[(d + 2) % 3]);
+                    capsule.height = shape.Height / scale[d];
                     return true;
                 }
                 default:
@@ -96,9 +99,11 @@ namespace AutoCollider.Editor
             if (created == null) return old;
 
             CopySettings(old, created);
+            var oldEntryState = new ColliderEntry(old, entry.Label, entry.PartId, entry.Generated, entry.OwnsGameObject);
             ColliderWriter.RecordGroup(group, Strings.UndoEditCollider); // after the create, right before the change
             entry.Collider = created;
-            ColliderWriter.DestroyCollider(old, group.Container);
+            entry.OwnsGameObject = ColliderWriter.OwnsHost(created, group);
+            ColliderWriter.DestroyEntryCollider(oldEntryState, group.Container);
             return created;
         }
 
@@ -120,6 +125,7 @@ namespace AutoCollider.Editor
             EditorUtility.CopySerialized(collider, copy);
             Undo.RecordObject(group, Strings.UndoEditCollider);
             entry.Collider = copy;
+            entry.OwnsGameObject = true;
             Undo.DestroyObjectImmediate(collider);
             MarkEdited(group, entry);
             EditorUtility.SetDirty(group);
@@ -138,6 +144,10 @@ namespace AutoCollider.Editor
                 var space = ColliderShapes.SpaceOf(group);
                 var shape = ColliderShapes.ToShape(c, group, space);
                 shape.Label += " (Copy)";
+                // A collider on its own object under a bone (or any non-container parent) is duplicated next to it.
+                var parent = c.transform.parent;
+                if (ColliderShapes.IsDedicatedChild(c, group) && parent != null && parent != group.Container)
+                    shape = ColliderShapes.ToParentLocal(shape, parent, group, space);
                 var entry = writer.AddShape(group, shape, space, c);
                 if (entry == null) continue;
                 MarkEdited(group, entry);
@@ -155,7 +165,7 @@ namespace AutoCollider.Editor
                 ColliderShapes.TryFind(c, out var group, out var entry);
                 ColliderWriter.RecordGroup(group, Strings.UndoDelete);
                 group.RemoveEntry(entry);
-                ColliderWriter.DestroyCollider(c, group.Container);
+                ColliderWriter.DestroyEntryCollider(entry, group.Container);
                 count++;
             }
             return count;
@@ -205,7 +215,7 @@ namespace AutoCollider.Editor
                     ColliderShapes.TryFind(c, out _, out var old);
                     ColliderWriter.RecordGroup(group, Strings.UndoMerge);
                     group.RemoveEntry(old);
-                    ColliderWriter.DestroyCollider(c, group.Container);
+                    ColliderWriter.DestroyEntryCollider(old, group.Container);
                 }
                 if (entry == null) continue;
                 MarkEdited(group, entry);
@@ -297,6 +307,66 @@ namespace AutoCollider.Editor
             }
             return 0;
         });
+
+        // ---------- Painted regions ----------
+
+        /// <summary>
+        /// Turn painted triangles into regions (one per renderer) stored in each group's recipe, and build their colliders —
+        /// exactly as generation will rebuild them later. One Undo step.
+        /// </summary>
+        public static List<Collider> CreateRegions(IReadOnlyDictionary<Renderer, HashSet<int>> painted, PartShape shape) =>
+            Run(Strings.UndoCreateRegion, () =>
+            {
+                var created = new List<Collider>();
+                var writer = Writer(out var store);
+                foreach (var pair in painted)
+                {
+                    var renderer = pair.Key;
+                    var group = renderer != null ? renderer.GetComponentInParent<ColliderGroup>(true) : null;
+                    if (group == null || pair.Value.Count == 0) continue;
+
+                    ColliderWriter.RecordGroup(group, Strings.UndoCreateRegion);
+                    var region = group.Recipe.AddRegion(RegionFitter.NextLabel(group.Recipe), renderer, RegionFitter.Sorted(pair.Value), shape);
+
+                    var settings = group.Recipe.Settings;
+                    var space = ColliderShapes.SpaceOf(group);
+                    var context = GenerationPipeline.CreateContext(group.gameObject, settings, space);
+                    var shapes = RegionFitter.Fit(region, MeshSource.Read(renderer, space), settings, context, out _);
+                    foreach (var fitted in shapes)
+                    {
+                        var entry = writer.AddShape(group, fitted, space);
+                        if (entry != null) created.Add(entry.Collider);
+                    }
+                }
+                store.Flush();
+                return created;
+            });
+
+        /// <summary>Remove a painted region and the colliders built from it. One Undo step.</summary>
+        public static int DeleteRegion(ColliderGroup group, int regionId) =>
+            Run(Strings.UndoDeleteRegion, () => RemoveRegion(group, regionId));
+
+        /// <summary>Remove every painted region of the group and their colliders. One Undo step.</summary>
+        public static int ClearRegions(ColliderGroup group) => Run(Strings.UndoDeleteRegion, () =>
+        {
+            var removed = 0;
+            foreach (var id in group.Recipe.Regions.Select(r => r.Id).ToList()) removed += RemoveRegion(group, id);
+            return removed;
+        });
+
+        private static int RemoveRegion(ColliderGroup group, int regionId)
+        {
+            ColliderWriter.RecordGroup(group, Strings.UndoDeleteRegion);
+            group.Recipe.RemoveRegion(regionId);
+            var removed = 0;
+            foreach (var entry in group.Entries.Where(e => e.PartId == regionId).ToList())
+            {
+                ColliderWriter.RecordGroup(group, Strings.UndoDeleteRegion);
+                group.RemoveEntry(entry);
+                if (ColliderWriter.DestroyEntryCollider(entry, group.Container)) removed++;
+            }
+            return removed;
+        }
 
         // ---------- Helpers ----------
 

@@ -12,13 +12,25 @@ namespace AutoCollider
         [SerializeField] private int _partId = -1;
         [SerializeField] private bool _generated;
         [SerializeField] private bool _locked;
+        [SerializeField] private bool _ownsGameObject;
 
-        public ColliderEntry(Collider collider, string label, int partId, bool generated)
+        public ColliderEntry(Collider collider, string label, int partId, bool generated, bool ownsGameObject = false)
         {
             _collider = collider;
             _label = label;
             _partId = partId;
             _generated = generated;
+            _ownsGameObject = ownsGameObject;
+        }
+
+        /// <summary>
+        /// True when the collider sits alone on a GameObject Auto Collider created for it (rotated primitive, bone collider),
+        /// which is then moved / rotated as a transform and deleted together with the collider.
+        /// </summary>
+        public bool OwnsGameObject
+        {
+            get => _ownsGameObject;
+            internal set => _ownsGameObject = value;
         }
 
         /// <summary>The tracked collider. Null if it was deleted outside the tool.</summary>
@@ -35,8 +47,15 @@ namespace AutoCollider
             set => _label = value;
         }
 
-        /// <summary>Index of the generated part that produced this collider; -1 for manual colliders.</summary>
-        public int PartId => _partId;
+        /// <summary>
+        /// Index of the generated part that produced this collider, or the <see cref="PaintedRegion.Id"/> it was built from
+        /// (≥ <see cref="GenerationRecipe.FirstRegionId"/>); -1 for manual colliders.
+        /// </summary>
+        public int PartId
+        {
+            get => _partId;
+            internal set => _partId = value;
+        }
 
         /// <summary>True when Auto Collider created this collider. Only generated colliders are ever removed by the tool.</summary>
         public bool Generated => _generated;

@@ -24,11 +24,17 @@ namespace AutoCollider.Editor
             return space;
         }
 
-        /// <summary>True when the collider sits alone on its own child of the container (move / rotate the transform).</summary>
+        /// <summary>
+        /// True when the collider sits alone on a GameObject of its own (rotated child of the container, bone child, …):
+        /// it is moved / rotated through that transform.
+        /// </summary>
         public static bool IsDedicatedChild(Collider collider, ColliderGroup group)
         {
             var t = collider.transform;
-            return group.Container != null && t != group.Container && t.parent == group.Container
+            if (t == group.transform || t == group.Container) return false;
+            if (group.TryGetEntry(collider, out var entry) && entry.OwnsGameObject) return true;
+            // Groups made before the ownership flag existed: a lone collider on a child of the container.
+            return group.Container != null && t.parent == group.Container
                    && t.childCount == 0 && collider.GetComponents<Component>().Length == 2;
         }
 
@@ -209,6 +215,39 @@ namespace AutoCollider.Editor
                 : FittedShape.FromCapsule(CapsuleFitter.BestAxisAligned(points));
             fixedShape.Label = label;
             return fixedShape;
+        }
+
+        /// <summary>
+        /// Re-express a scaled-space shape in <paramref name="parent"/>'s local space (for colliders created under bones).
+        /// Assumes the parent's scale is uniform.
+        /// </summary>
+        public static FittedShape ToParentLocal(FittedShape shape, Transform parent, ColliderGroup group, in TargetSpace space)
+        {
+            var scale = math.cmax(math.abs((float3)parent.lossyScale));
+            var local = new FittedShape
+            {
+                Kind = shape.Kind,
+                Label = shape.Label,
+                Parent = parent,
+                RegionId = shape.RegionId,
+                Direction = shape.Direction,
+                Size = shape.Size / scale,
+                Radius = shape.Radius / scale,
+                Height = shape.Height / scale,
+                Center = (float3)parent.InverseTransformPoint(ToWorld(space, shape.Center)),
+                Rotation = math.mul(math.inverse((quaternion)parent.rotation),
+                    math.mul((quaternion)group.transform.rotation, shape.Rotation)),
+            };
+
+            if (shape.IsMesh)
+            {
+                var source = shape.MeshVertices;
+                var vertices = new float3[source.Length];
+                for (var i = 0; i < vertices.Length; i++) vertices[i] = (float3)parent.InverseTransformPoint(ToWorld(space, source[i]));
+                local.Hull = new ConvexHull(vertices, shape.MeshTriangles);
+                local.Kind = ShapeKind.ConvexMesh;
+            }
+            return local;
         }
 
         public static float3 ToScaled(in TargetSpace space, Vector3 world) => math.transform(space.WorldToScaled, world);

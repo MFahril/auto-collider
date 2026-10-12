@@ -33,10 +33,10 @@ namespace AutoCollider.Editor
             var modes = Row(root);
             _select = Toggle(modes, Strings.ModeSelect, Strings.ModeSelectTooltip, () => ColliderEditState.SetMode(ColliderToolMode.Select));
             _edit = Toggle(modes, Strings.ModeEdit, Strings.ModeEditTooltip, () => ColliderEditState.SetMode(ColliderToolMode.Edit));
-            _paint = Toggle(modes, Strings.ModePaint, Strings.ModePaintTooltip, null);
-            _paint.SetEnabled(false);
+            _paint = Toggle(modes, Strings.ModePaint, Strings.ModePaintTooltip, () => ColliderEditState.SetMode(ColliderToolMode.Paint));
 
             var handles = Row(root);
+            _handlesRow = handles;
             _resize = Toggle(handles, Strings.HandleResize, Strings.HandleResizeTooltip, () => ColliderEditState.SetHandleMode(ColliderHandleMode.Resize));
             _move = Toggle(handles, Strings.HandleMove, Strings.HandleMoveTooltip, () => ColliderEditState.SetHandleMode(ColliderHandleMode.Move));
             _rotate = Toggle(handles, Strings.HandleRotate, Strings.HandleRotateTooltip, () => ColliderEditState.SetHandleMode(ColliderHandleMode.Rotate));
@@ -87,6 +87,8 @@ namespace AutoCollider.Editor
             Action(fit, "+", Strings.ActionInflateTooltip, () => ColliderToolCommands.Inflate(Mathf.Abs(_step.value)));
             Action(fit, "−", Strings.ActionDeflateTooltip, () => ColliderToolCommands.Inflate(-Mathf.Abs(_step.value)));
 
+            BuildPaintSection(root);
+
             var view = Row(root);
             _solo = Action(view, Strings.ActionSolo, Strings.ActionSoloTooltip, ColliderEditState.ToggleSolo);
             Action(view, Strings.ActionShowAll, Strings.ActionShowAllTooltip, ColliderEditState.ShowAll);
@@ -107,13 +109,98 @@ namespace AutoCollider.Editor
             return root;
         }
 
+        private VisualElement _handlesRow, _paintSection, _regionList;
+        private Label _paintSummary;
+        private SliderInt _brush;
+        private VisualElement _createRow;
+
+        private void BuildPaintSection(VisualElement root)
+        {
+            _paintSection = new VisualElement();
+            root.Add(_paintSection);
+
+            _paintSummary = new Label();
+            _paintSummary.AddToClassList("ac-overlay__summary");
+            _paintSection.Add(_paintSummary);
+            var hint = new Label(Strings.PaintHint);
+            hint.AddToClassList("ac-hint");
+            _paintSection.Add(hint);
+
+            _brush = new SliderInt(Strings.PaintBrush, 4, 128) { tooltip = Strings.PaintBrushTooltip, showInputField = true };
+            _brush.AddToClassList("ac-overlay__brush");
+            _brush.RegisterValueChangedCallback(e => ColliderEditState.BrushRadius = e.newValue);
+            _paintSection.Add(_brush);
+
+            var select = Row(_paintSection);
+            Action(select, Strings.PaintAll, Strings.PaintAllTooltip, ColliderToolCommands.PaintAll);
+            Action(select, Strings.PaintConnected, Strings.PaintConnectedTooltip, ColliderToolCommands.PaintConnected);
+            Action(select, Strings.PaintGrow, Strings.PaintGrowTooltip, ColliderToolCommands.PaintGrow);
+            Action(select, Strings.PaintClear, Strings.PaintClearTooltip, ColliderToolCommands.ClearPaint);
+
+            _createRow = Row(_paintSection);
+            Caption(_createRow, Strings.CaptionCreate);
+            foreach (var shape in new[] { PartShape.Auto, PartShape.Box, PartShape.Sphere, PartShape.Capsule, PartShape.ConvexHull, PartShape.ConvexParts })
+            {
+                var s = shape;
+                Action(_createRow, Strings.PartShapeName(s), Strings.CreateRegionTooltip, () => ColliderToolCommands.CreateRegion(s));
+            }
+
+            var regionsHeader = new Label(Strings.RegionsHeader);
+            regionsHeader.AddToClassList("ac-overlay__caption");
+            _paintSection.Add(regionsHeader);
+            _regionList = new VisualElement();
+            _regionList.AddToClassList("ac-overlay__regions");
+            _paintSection.Add(_regionList);
+            var regenerateNote = new Label(Strings.RegionsRegenerateNote);
+            regenerateNote.AddToClassList("ac-hint");
+            _paintSection.Add(regenerateNote);
+        }
+
+        private void RefreshPaint()
+        {
+            _paintSummary.text = string.Format(Strings.PaintSummary, ColliderEditState.PaintedCount);
+            _brush.SetValueWithoutNotify(Mathf.RoundToInt(ColliderEditState.BrushRadius));
+            _createRow.SetEnabled(ColliderEditState.PaintedCount > 0);
+
+            _regionList.Clear();
+            foreach (var group in ColliderToolCommands.SelectedGroups())
+            {
+                var regions = group.Recipe.Regions;
+                for (var i = 0; i < regions.Count; i++)
+                {
+                    var region = regions[i];
+                    var row = Row(_regionList);
+                    var swatch = new VisualElement();
+                    swatch.AddToClassList("ac-overlay__swatch");
+                    swatch.style.backgroundColor = PaintDrawing.RegionColor(i);
+                    row.Add(swatch);
+                    var label = new Label(string.Format(Strings.RegionRow, region.Label, Strings.PartShapeName(region.Shape), region.Triangles.Length));
+                    label.AddToClassList("ac-overlay__region-label");
+                    row.Add(label);
+                    Action(row, Strings.RegionPaint, Strings.RegionPaintTooltip, () => ColliderToolCommands.LoadRegion(region));
+                    Action(row, "✕", Strings.RegionDeleteTooltip, () => ColliderToolCommands.DeleteRegion(group, region));
+                }
+            }
+            if (_regionList.childCount == 0)
+            {
+                var none = new Label(Strings.RegionsNone);
+                none.AddToClassList("ac-hint");
+                _regionList.Add(none);
+            }
+        }
+
         private void Refresh()
         {
             if (_summary == null) return;
             var mode = ColliderEditState.Mode;
             var handle = ColliderEditState.HandleMode;
+            var painting = mode == ColliderToolMode.Paint;
             Mark(_select, mode == ColliderToolMode.Select);
             Mark(_edit, mode == ColliderToolMode.Edit);
+            Mark(_paint, painting);
+            _handlesRow.EnableInClassList("ac-hidden", painting);
+            _paintSection.EnableInClassList("ac-hidden", !painting);
+            if (painting) RefreshPaint();
             Mark(_resize, mode == ColliderToolMode.Edit && handle == ColliderHandleMode.Resize);
             Mark(_move, mode == ColliderToolMode.Edit && handle == ColliderHandleMode.Move);
             Mark(_rotate, mode == ColliderToolMode.Edit && handle == ColliderHandleMode.Rotate);
@@ -125,7 +212,9 @@ namespace AutoCollider.Editor
                 : active is MeshCollider && handle == ColliderHandleMode.Resize && mode == ColliderToolMode.Edit ? Strings.ToolMeshResizeHint
                 : Strings.ToolEditHint;
 
-            _selectionActions.EnableInClassList("ac-hidden", selected.Count == 0);
+            _selectionActions.EnableInClassList("ac-hidden", selected.Count == 0 || painting);
+            _summary.EnableInClassList("ac-hidden", painting);
+            _hint.EnableInClassList("ac-hidden", painting);
             _mergeHull.SetEnabled(selected.Count > 1);
             _mergeBox.SetEnabled(selected.Count > 1);
 

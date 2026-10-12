@@ -1,6 +1,6 @@
 {
   "name": "com.fahril.autocollider",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "displayName": "Auto Collider",
   "description": "Generate, optimize and edit colliders for one or many objects: fitted primitives, convex hulls, convex decomposition, simplified mesh colliders, in-scene collider editing and a multi-collider group component.",
   "unity": "6000.6",

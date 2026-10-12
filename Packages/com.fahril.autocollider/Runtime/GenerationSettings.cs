@@ -83,6 +83,20 @@ namespace AutoCollider
         [Range(0.5f, 1f)]
         public float ConvexityThreshold = 0.85f;
 
+        [Tooltip("Skinned meshes (Per Bone, and Auto): collider shape created for each bone.")]
+        public PartShape BoneShape = PartShape.Capsule;
+
+        [Tooltip("A vertex belongs to its strongest bone only if that bone's weight is at least this (0.5 = mostly that bone).")]
+        [Range(0f, 1f)]
+        public float BoneWeightThreshold = 0.5f;
+
+        [Tooltip("Bones with fewer vertices than this get no collider (fingers, twist bones, …).")]
+        [Min(4)]
+        public int MinBoneVertices = 12;
+
+        [Tooltip("Give left / right bone pairs (…_L / …_R, Left… / Right…) the same collider size.")]
+        public bool SymmetricBones = true;
+
         /// <summary>Deep copy (the material reference is shared).</summary>
         public GenerationSettings Clone() => (GenerationSettings)MemberwiseClone();
     }

@@ -10,6 +10,7 @@ namespace AutoCollider.Editor
     {
         private readonly Label _status;
         private readonly Button _enter;
+        private readonly Button _paint;
 
         public EditTab()
         {
@@ -26,6 +27,9 @@ namespace AutoCollider.Editor
             _enter.AddToClassList("ac-button");
             _enter.AddToClassList("ac-button--primary");
             intro.Add(_enter);
+            _paint = new Button(ColliderToolCommands.StartPainting) { text = Strings.EditTabPaint, tooltip = Strings.EditTabPaintTooltip };
+            _paint.AddToClassList("ac-button");
+            intro.Add(_paint);
 
             var shortcuts = Section(this, Strings.EditTabShortcuts);
             var list = new Label(Strings.EditTabShortcutList);
@@ -42,6 +46,7 @@ namespace AutoCollider.Editor
             var groups = Selection.gameObjects.Select(g => g.GetComponent<ColliderGroup>()).Where(g => g != null).ToList();
             _status.text = groups.Count == 0 ? Strings.EditTabNoGroup : string.Format(Strings.EditTabGroups, groups.Count, groups.Sum(g => g.LiveCount));
             _enter.SetEnabled(groups.Count > 0);
+            _paint.SetEnabled(Selection.gameObjects.Any(g => !EditorUtility.IsPersistent(g)));
         }
     }
 }
