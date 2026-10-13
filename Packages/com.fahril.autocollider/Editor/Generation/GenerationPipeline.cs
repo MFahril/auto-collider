@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace AutoCollider.Editor
@@ -34,7 +35,7 @@ namespace AutoCollider.Editor
             {
                 context = CreateContext(target, settings, space, result);
                 ComputeRegions(group, settings, context, space, result);
-                if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
+                if (result.ShapeCount == 0) result.Skip(Strings.SkipNoMeshes);
                 return result;
             }
 
@@ -52,12 +53,14 @@ namespace AutoCollider.Editor
             var lodOf = lodGroup != null ? LodLevels(target, lodGroup, renderers) : null;
             if (lodOf != null && lodOf.Count > 0) result.LodGroup = lodGroup;
             foreach (var w in warnings) result.Warn(w);
-            result.RendererCount = renderers.Count;
-            if (renderers.Count == 0)
+            var tilemaps = TilemapSetup.Collect(target, settings);
+            result.RendererCount = renderers.Count + tilemaps.Count;
+            if (renderers.Count == 0 && tilemaps.Count == 0)
             {
                 result.Skip(Strings.SkipNoMeshes);
                 return result;
             }
+            ComputeTilemaps(tilemaps, settings, space, result);
 
             // Sprites (and meshes moved by a Rigidbody2D, or everything when Dimension is 2D) get 2D colliders.
             var renderers3D = new List<Renderer>(renderers.Count);
@@ -135,8 +138,37 @@ namespace AutoCollider.Editor
                 }
             }
 
-            if (result.ShapeCount == 0) result.Skip(Strings.SkipNoMeshes);
+            if (result.ShapeCount == 0 && result.TilemapComposites.Count == 0) result.Skip(Strings.SkipNoMeshes);
             return result;
+        }
+
+        /// <summary>Tilemaps: Composite → set up live colliders at apply time; Baked → traced polygon shapes now.</summary>
+        private static void ComputeTilemaps(List<UnityEngine.Tilemaps.Tilemap> tilemaps, GenerationSettings settings, in TargetSpace space,
+            TargetResult result)
+        {
+            foreach (var tilemap in tilemaps)
+            {
+                if (settings.TilemapColliders == TilemapColliderMode.Composite)
+                {
+                    result.TilemapComposites.Add(tilemap);
+                    continue;
+                }
+                var outline = TilemapSetup.BakedOutline(tilemap, space);
+                if (outline == null)
+                {
+                    result.Warn(string.Format(Strings.WarningTilemapLayout, tilemap.name));
+                    result.TilemapComposites.Add(tilemap);
+                    continue;
+                }
+                var shapes = TilemapSetup.BakedShapes(outline, settings);
+                result.Shapes2D.AddRange(shapes);
+                if (shapes.Count > 0)
+                {
+                    var points = 0;
+                    foreach (var s in shapes) points += s.PointCount;
+                    result.Notes.Add(string.Format(Strings.NoteTilemapBaked, tilemap.name, points));
+                }
+            }
         }
 
         /// <summary>Fit options for a target (rotation needs uniform scale; Rigidbody makes it dynamic).</summary>
@@ -151,6 +183,8 @@ namespace AutoCollider.Editor
             TargetResult result)
         {
             var geometryCache = new Dictionary<Renderer, MeshGeometry>();
+            var geometry2D = new Dictionary<Renderer, (float2[] vertices, int[] triangles)>();
+            var context2D = new FitContext(settings.AllowRotation && GenerationPipeline2D.IsUniform2D(space));
             foreach (var region in group.Recipe.Regions)
             {
                 if (region.Renderer == null)
@@ -158,6 +192,20 @@ namespace AutoCollider.Editor
                     result.Warn(string.Format(Strings.WarningRegionRendererMissing, region.Label));
                     continue;
                 }
+
+                if (GenerationPipeline2D.Is2D(region.Renderer, group.gameObject, settings))
+                {
+                    if (!geometry2D.TryGetValue(region.Renderer, out var paint))
+                    {
+                        RegionFitter2D.PaintGeometry(region.Renderer, settings, space, out var vertices, out var triangles);
+                        geometry2D[region.Renderer] = paint = (vertices, triangles);
+                    }
+                    var shapes2D = RegionFitter2D.Fit(region, paint.vertices, paint.triangles, settings, context2D, out var invalid2D);
+                    if (invalid2D > 0) result.Warn(string.Format(Strings.WarningRegionTrianglesChanged, region.Label, invalid2D));
+                    result.Shapes2D.AddRange(shapes2D);
+                    continue;
+                }
+
                 if (!geometryCache.TryGetValue(region.Renderer, out var geometry))
                 {
                     geometry = MeshSource.Read(region.Renderer, space);
@@ -169,7 +217,7 @@ namespace AutoCollider.Editor
                 if (invalid > 0) result.Warn(string.Format(Strings.WarningRegionTrianglesChanged, region.Label, invalid));
                 result.Shapes.AddRange(shapes);
             }
-            result.RendererCount = geometryCache.Count;
+            result.RendererCount = geometryCache.Count + geometry2D.Count;
             result.Notes.Add(string.Format(Strings.NoteRegions, group.Recipe.Regions.Count));
         }
 

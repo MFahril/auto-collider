@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> **1.1.0** — now with **2D colliders** for sprites and flat meshes. Full user manual in [`Documentation~/index.md`](Documentation~/index.md); a Demo sample is available in the Package Manager (*Samples ▸ Demo*).
+> **1.2.0** — **2D colliders** for sprites, flat meshes and tilemaps, editable in the Scene view. Full user manual in [`Documentation~/index.md`](Documentation~/index.md); a Demo sample is available in the Package Manager (*Samples ▸ Demo*).
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -36,8 +36,10 @@ Select sprites and press **Shift+Alt+C** — they get **2D colliders** (Box / Ci
 
 - Outlines are traced from the sprite's pixels (no Read/Write needed). Pick *Physics Shape* to use a custom physics shape drawn in the Sprite Editor.
 - Meshes get 2D colliders too when a **Rigidbody2D** moves them, or when **Dimension** is *2D* — their silhouette seen along the object's Z axis (2.5D games with 3D art).
-- *Generate ▸ 2D* sets Dimension, the 2D strategy, outline source, alpha threshold, outline resolution and a Physics Material 2D. Quality controls outline detail.
-- 2D scene editing, painting and tilemaps arrive in 1.2.0; 2D collision events, sprite skeletons and the 2D Doctor in 1.3.0.
+- *Generate ▸ 2D* sets Dimension, the 2D strategy, outline source, alpha threshold, outline resolution, a Physics Material 2D and how tilemaps get colliders. Quality controls outline detail.
+- **Tilemaps**: *Composite* sets up Unity's live TilemapCollider2D + CompositeCollider2D (follows tile edits); *Baked* traces the tiles into one simplified polygon (holes included) — far fewer points.
+- **Edit in Scene** works on 2D colliders too: resize / move / rotate (around Z), drag polygon points (click **+** on an edge to add one, **Ctrl+click** to delete, **Simplify** in the overlay), and every operation (duplicate, mirror, merge, convert, refit, inflate, lock). **Paint** works on sprites as well.
+- 2D collision events, sprite skeletons and the 2D Doctor arrive in 1.3.0.
 
 ## Editing colliders in the Scene view
 Select an object with a **Collider Group** and click **Edit in Scene** (or pick the tool in the Tools overlay). Click colliders to select them (click again to cycle through overlaps, drag to box-select), then:

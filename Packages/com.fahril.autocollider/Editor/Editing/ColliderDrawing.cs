@@ -53,6 +53,40 @@ namespace AutoCollider.Editor
                 Handles.Label(collider.bounds.center, text, LabelStyle);
         }
 
+        /// <summary>3D or 2D collider.</summary>
+        public static void Draw(Component collider, ColliderGroup group, in TargetSpace space, bool selected, bool xray, bool label)
+        {
+            if (collider is Collider c3) Draw(c3, group, space, selected, xray, label);
+            else if (collider is Collider2D c2) Draw2D(c2, group, space, selected, label);
+        }
+
+        /// <summary>2D colliders: outline (and a translucent fill for convex shapes) in the collider's plane.</summary>
+        public static void Draw2D(Collider2D collider, ColliderGroup group, in TargetSpace space, bool selected, bool label)
+        {
+            var settings = AutoColliderSettings.instance.Data;
+            var shape = ColliderShapes2D.ToShape(collider, group, space);
+            if (shape == null) return;
+            var color = selected ? settings.SelectedColor : ShapeDrawing2D.ColorFor(shape.Kind, settings);
+            if (!collider.enabled) color.a *= 0.4f;
+
+            var plane = Matrix4x4.TRS(group.transform.position, group.transform.rotation, Vector3.one)
+                        * Matrix4x4.Translate(new Vector3(0f, 0f, ColliderShapes2D.PlaneZ(collider, space)));
+            Handles.zTest = CompareFunction.Always;
+            if (shape.Kind != ShapeKind2D.Polygon && shape.Kind != ShapeKind2D.Edge)
+            {
+                var fill = color;
+                fill.a = settings.FillOpacity * (selected ? 2f : 1f);
+                var outline = ColliderShapes2D.SurfacePoints(shape);
+                var points = new Vector3[outline.Length];
+                for (var i = 0; i < points.Length; i++) points[i] = new Vector3(outline[i].x, outline[i].y, 0f);
+                using (new Handles.DrawingScope(fill, plane)) Handles.DrawAAConvexPolygon(points);
+            }
+            ShapeDrawing2D.Draw(shape, plane, color);
+
+            if (label && TryLabel(collider, out var text))
+                Handles.Label(collider.bounds.center, text, LabelStyle);
+        }
+
         public static Color ColorFor(Collider collider, AutoColliderSettingsData settings) => collider switch
         {
             BoxCollider => settings.BoxColor,
@@ -139,10 +173,10 @@ namespace AutoCollider.Editor
             return array;
         }
 
-        private static bool TryLabel(Collider collider, out string text)
+        private static bool TryLabel(Component collider, out string text)
         {
             text = null;
-            if (!ColliderShapes.TryFind(collider, out _, out var entry)) return false;
+            if (!ColliderOperations.TryFindAny(collider, out _, out var entry)) return false;
             text = (entry.Locked ? "🔒 " : string.Empty) + (string.IsNullOrEmpty(entry.Label) ? collider.name : entry.Label);
             return true;
         }

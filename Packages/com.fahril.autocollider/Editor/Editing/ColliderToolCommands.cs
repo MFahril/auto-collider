@@ -10,7 +10,7 @@ namespace AutoCollider.Editor
     /// <summary>Commands shared by the collider tool, its overlay, shortcuts and the inspector.</summary>
     internal static class ColliderToolCommands
     {
-        private static List<Collider> Selection => ColliderEditState.Selected.Where(c => c != null).ToList();
+        private static List<Component> Selection => ColliderEditState.Selected.Where(c => c != null).ToList();
 
         public static bool IsToolActive => ToolManager.activeToolType == typeof(ColliderEditTool);
 
@@ -86,10 +86,19 @@ namespace AutoCollider.Editor
         {
             var selection = Selection;
             if (selection.Count == 0) return;
-            var anyUnlocked = selection.Any(c => ColliderShapes.TryFind(c, out _, out var e) && !e.Locked);
+            var anyUnlocked = selection.Any(c => ColliderOperations.TryFindAny(c, out _, out var e) && !e.Locked);
             ColliderOperations.SetLocked(selection, anyUnlocked);
             Notify(anyUnlocked ? Strings.NotifyLocked : Strings.NotifyUnlocked);
             ColliderEditState.NotifyChanged();
+        }
+
+        /// <summary>Simplify the active 2D polygon / edge collider (tolerance in world units).</summary>
+        public static void SimplifyActive(float tolerance)
+        {
+            if (!(ColliderEditState.Active is Collider2D active)) return;
+            var removed = ColliderOperations2D.Simplify(active, tolerance);
+            ColliderEditState.NotifyChanged();
+            Notify(string.Format(Strings.NotifySimplified, removed));
         }
 
         public static void Rename(string label)
@@ -190,18 +199,18 @@ namespace AutoCollider.Editor
             ColliderEditState.BrushRadius = Mathf.Clamp(ColliderEditState.BrushRadius * factor, 4f, 256f);
 
         public static void SelectAll(IEnumerable<ColliderGroup> groups) =>
-            ColliderEditState.Select(ColliderShapes.CollidersOf(groups).Where(ColliderEditState.IsVisible));
+            ColliderEditState.Select(ColliderShapes.ComponentsOf(groups).Where(ColliderEditState.IsVisible));
 
         public static void FrameSelection(SceneView view)
         {
             var selection = Selection;
             if (view == null || selection.Count == 0) return;
-            var bounds = selection[0].bounds;
-            foreach (var c in selection) bounds.Encapsulate(c.bounds);
+            var bounds = ColliderPicker.BoundsOf(selection[0]);
+            foreach (var c in selection) bounds.Encapsulate(ColliderPicker.BoundsOf(c));
             view.Frame(bounds, false);
         }
 
-        private static void SelectResult(List<Collider> created, string message)
+        private static void SelectResult(List<Component> created, string message)
         {
             ColliderEditState.Prune();
             if (created.Count > 0) ColliderEditState.Select(created);
@@ -212,14 +221,14 @@ namespace AutoCollider.Editor
         {
             var entries = new List<ColliderEntry>();
             foreach (var c in Selection)
-                if (ColliderShapes.TryFind(c, out _, out var entry)) entries.Add(entry);
+                if (ColliderOperations.TryFindAny(c, out _, out var entry)) entries.Add(entry);
             return entries;
         }
 
         /// <summary>Operations may rebuild a collider but keep its entry: select the entries' current colliders again.</summary>
         private static void Reselect(List<ColliderEntry> entries)
         {
-            ColliderEditState.Select(entries.Select(e => e.Collider).Where(c => c != null));
+            ColliderEditState.Select(entries.Select(e => e.Component).Where(c => c != null));
         }
 
         public static void Notify(string message)

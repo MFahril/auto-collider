@@ -48,6 +48,16 @@ namespace AutoCollider.Editor
         /// <summary>Read a renderer (skinned meshes in their current pose) into world space.</summary>
         public static PaintMesh Build(Renderer renderer, ColliderGroup group)
         {
+            if (renderer is SpriteRenderer sprite)
+            {
+                // Sprites paint on a fine grid of their opaque cells (see SpriteSource.PaintTriangles).
+                SpriteSource.PaintTriangles(sprite, group.Recipe.Settings, out var local, out var spriteTriangles);
+                var toWorld = SpriteSource.SpriteToWorld(sprite);
+                var points = new Vector3[local.Length];
+                for (var i = 0; i < points.Length; i++) points[i] = toWorld.MultiplyPoint3x4(new Vector3(local[i].x, local[i].y, 0f));
+                return new PaintMesh(renderer, group, points, spriteTriangles);
+            }
+
             var space = ColliderShapes.SpaceOf(group);
             var geometry = MeshSource.Read(renderer, space);
             var world = new Vector3[geometry.Vertices.Length];

@@ -230,13 +230,8 @@ namespace AutoCollider.Editor
             label.RegisterCallback<ClickEvent>(e =>
             {
                 if (!(row.userData is ColliderEntry entry) || !entry.IsAlive) return;
-                if (entry.Collider == null)
-                {
-                    Frame2D(entry);
-                    return;
-                }
                 var op = e.shiftKey ? SelectOp.Add : e.actionKey ? SelectOp.Toggle : SelectOp.Replace;
-                ColliderEditState.Select(entry.Collider, op);
+                ColliderEditState.Select(entry.Component, op);
                 ColliderToolCommands.ActivateTool();
             });
             row.Add(label);
@@ -255,13 +250,8 @@ namespace AutoCollider.Editor
             select.clicked += () =>
             {
                 if (!(row.userData is ColliderEntry entry) || !entry.IsAlive) return;
-                if (entry.Collider == null)
-                {
-                    Frame2D(entry);
-                    return;
-                }
                 // Keep the group selected (the tool needs it) and select the collider inside the tool instead.
-                ColliderEditState.Select(entry.Collider);
+                ColliderEditState.Select(entry.Component);
                 ColliderToolCommands.ActivateTool();
                 ColliderToolCommands.FrameSelection(SceneView.lastActiveSceneView);
             };
@@ -282,7 +272,7 @@ namespace AutoCollider.Editor
             var entry = _rows[index];
             var collider = entry.Component;
             row.userData = entry;
-            row.EnableInClassList("ac-entry-row--selected", entry.Collider != null && ColliderEditState.IsSelected(entry.Collider));
+            row.EnableInClassList("ac-entry-row--selected", ColliderEditState.IsSelected(collider));
 
             row.Q<Image>("icon").image = AssetPreview.GetMiniTypeThumbnail(collider.GetType());
             var label = row.Q<Label>("label");

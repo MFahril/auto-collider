@@ -334,3 +334,24 @@ both containers.
   X/Y scale.
 
 2D physics ignores an object's X/Y rotation, so keep 2D objects facing the camera.
+
+**Tilemaps** (*Generate ▸ 2D ▸ Tilemap Colliders*):
+- *Composite* (default): Unity's live `TilemapCollider2D`, merged by a `CompositeCollider2D` on a static `Rigidbody2D`.
+  It follows tile edits. If the tilemap already has a `TilemapCollider2D` of its own, it is left alone.
+- *Baked*: the tiles are traced into one simplified polygon collider, with holes included (or edge loops with the
+  *Edge* strategy). This gives far fewer points, but you must regenerate after editing tiles. Grid-collider tiles keep
+  exact corners; sprite-collider tiles follow their sprite's physics shape. Only rectangular grids can be baked.
+
+**Editing 2D colliders.** *Edit in Scene* works on 2D colliders exactly like on 3D ones:
+- Resize, Move and Rotate (around Z).
+- On polygon and edge colliders, Resize mode shows a handle on every point:
+  - drag a point to move it;
+  - click **+** on an edge to insert a point;
+  - **Ctrl+click** a point to delete it;
+  - the overlay's **Simplify** removes points within a tolerance.
+- Hold **V** to snap to the sprite outline.
+- Mirror works across X and Y.
+- *Convert ▸ Sphere* gives a circle, and *Convert ▸ Convex* gives a convex polygon.
+
+**Painting 2D colliders.** Paint mode works on sprites: the brush paints a fine grid of the sprite's opaque pixels. On
+flat meshes it paints the mesh triangles. The regions become 2D colliders and regenerate identically.

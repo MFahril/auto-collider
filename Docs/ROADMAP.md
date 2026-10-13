@@ -24,7 +24,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M6 | Runtime bridge features | 5 | ✅ |
 | M7 | Polish & release | 1 | ✅ |
 | M8 | 2D core generation | 1, 2, 3, 5 | ✅ |
-| M9 | 2D editing, painting & tilemaps | 4 | ⬜ |
+| M9 | 2D editing, painting & tilemaps | 4 | ✅ |
 | M10 | 2D runtime, skeletons, Doctor & release | 5 | ⬜ |
 
 Criteria: 1 clean UI · 2 optimize · 3 multi-object · 4 scene editing · 5 multi-collider bridge.
@@ -226,15 +226,16 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M9 — 2D editing, painting & tilemaps ⬜ (package 1.2.0)
+## M9 — 2D editing, painting & tilemaps ✅ (package 1.2.0)
 
-- [ ] `ColliderShapes2D` (`Collider2D` ↔ `FittedShape2D`, exact round trip); `ColliderOperations` dispatch by `Is2D`: duplicate, delete, mirror X / Y, merge → convex polygon / box, convert, refit to the outline, inflate / deflate (analytic / polygon offset) — one Undo each
-- [ ] Edit tool: 2D picking (`OverlapPoint` on the collider's z plane), 2D box / circle / capsule handles, move / rotate around z, polygon point editing (drag, insert on edge, Ctrl+click delete, simplify slider), V snaps to sprite outline points, 2D drawing
-- [ ] Paint on sprites / flat meshes (`PaintMesh` from the sprite mesh) → `RegionFitter2D`; regions in the recipe like 3D
-- [ ] Tilemaps (`TilemapSetup`): *Composite* mode (TilemapCollider2D + CompositeCollider2D + static Rigidbody2D, owned + undoable) and *Baked* mode (simplified composite paths → owned Polygon / Edge colliders; live tilemap collider disabled, restored on Remove)
-- [ ] Tests: round trips, each op + undo, polygon point edit, picking order, tilemap setup / bake / remove + undo (in-memory Tiles), painted 2D region → identical regenerate
+- [x] Tool state is `Component`-based (3D `Collider` or `Collider2D`): `ColliderEditState`, picking, drawing, commands, overlay, inspector rows all handle both; `ColliderShapes.ComponentsOf`, `ColliderOperations.TryFindAny`
+- [x] `ColliderShapes2D` (`Collider2D` ↔ `FittedShape2D` in the group's 2D space, exact round trip incl. scale and rotated children; containment, surface points, mirror, `EnsureRepresentable`) + `ColliderOperations2D`: Apply (in place when the kind and the host's angle match, else rebuilt on the 2D container and the entry re-pointed), duplicate, mirror X / Y, merge → convex polygon / box, convert (Sphere → Circle, Convex → Polygon), refit to the source outline, inflate / deflate; `ColliderOperations` gets mixed-selection overloads (3D part → the existing code, 2D part → 2D) — still one Undo step each; tilemap / composite colliders are excluded from shape edits
+- [x] Edit tool: 2D picking (ray ∩ the collider's plane → `OverlapPoint`; edges within a few pixels; sorted with 3D hits by distance), 2D drawing (outline + fill), 2D box / circle / capsule bounds handles (X / Y axes), move in the plane, rotate around Z (`Handles.Disc`), polygon / edge point handles (drag; "+" at edge midpoints inserts; Ctrl+click deletes), V snaps to the sprite outline; overlay Polygon row with a Simplify tolerance
+- [x] Painting on sprites: a fine paint grid (`SpriteSource.PaintTriangles` — two triangles per opaque cell of the alpha mask; Unity's sprite meshes are too coarse to paint), flat meshes paint on their triangles; `RegionFitter2D` (union of painted triangles → trace → fit by the region's shape) shared by `CreateRegions` and generation; locked 2D region colliders suppress their region
+- [x] Tilemaps (`TilemapSetup`, setting *Tilemap Colliders*): **Composite** — TilemapCollider2D (merge) + CompositeCollider2D (polygons) + a static Rigidbody2D recorded in `ColliderGroup.OwnedComponents` (removed with the colliders); a user's own TilemapCollider2D is left alone with a warning. **Baked** — the tiles themselves are rasterized (grid cells exactly; sprite-shape tiles at 4 sub-cells via their physics shape and tile transform), traced and simplified into owned polygon (or edge) colliders; the tilemap isn't touched; non-rectangular layouts fall back to Composite. (Changed from the plan: baking reads the tiles instead of a composite's paths, so the user's tilemap needs no temporary colliders.)
+- [x] Tests (20 new): 2D round trips ×5, rotated box → own child + undo, resize in place + lock + undo, mixed 3D + 2D duplicate / delete (one undo each), mirror (points + side names), merge / convert / inflate, refit, point move / insert / delete + undo / simplify, picking order (front / back / hollow edge), lock + rename; tilemap baked (2 paths, area 5, 10 corner points), baked edges, composite setup / regenerate / remove (incl. the owned Rigidbody2D) / undo, user tilemap collider untouched, sprite paint grid, painted sprite region → identical regenerate + locked region kept
 
-**Done when:** every 2D collider can be edited in the Scene view with one Undo per action; tilemaps get merged or baked colliders in one click.
+**Done when:** every 2D collider can be edited in the Scene view with one Undo per action; tilemaps get merged or baked colliders in one click. → *Verified 2026-10-13: 218/218 EditMode + 8/8 PlayMode tests, console clean. Live on the 2D dev scene (now with a tilemap: ground, steps, a block with a hole, a floating platform): Baked → one polygon with 3 paths / 20 points in 26 ms; the edit tool shows the star's polygon with point handles and the overlay's Polygon row; Simplify 34 → 26 points.*
 
 ---
 
@@ -284,3 +285,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M7 ✅ | Collider Doctor (11 checks, one-click fixes, Fix All), hierarchy badge, user manual, Demo sample, perf pass (1,000-object batch 55 s → 3.9 s: capped OBB directions, faster capped hull, batch fit cache), tooltip guard, test-scene leak fix; 163 EditMode + 8 PlayMode tests green; package 1.0.0 |
 | 2026-10-13 | Plan | 2D support planned as M8 (core generation, 1.1.0), M9 (editing, painting, tilemaps, 1.2.0), M10 (runtime, skeletons, Doctor, release, 1.3.0) |
 | 2026-10-13 | M8 ✅ | 2D generation: sprites (pixel tracing), flat meshes, box / circle / capsule / polygon / edge 2D fitters, Auto 2D, separate 2D container, inspector + preview; 198 EditMode + 8 PlayMode tests green; package 1.1.0 |
+| 2026-10-13 | M9 ✅ | 2D editing (handles, point editing, all operations, mixed 3D + 2D selections), 2D painting (sprite paint grid), tilemaps (Composite / Baked); 218 EditMode + 8 PlayMode tests green; package 1.2.0 |

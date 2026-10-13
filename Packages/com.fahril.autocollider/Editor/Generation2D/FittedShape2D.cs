@@ -44,6 +44,9 @@ namespace AutoCollider.Editor
 
         public string Note;
 
+        /// <summary>The painted region this shape was built from (its entry's PartId), or -1.</summary>
+        public int RegionId = -1;
+
         /// <summary>LOD level the shape was fitted for, or -1.</summary>
         public int Lod = -1;
 

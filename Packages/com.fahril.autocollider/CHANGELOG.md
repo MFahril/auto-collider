@@ -3,6 +3,14 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [1.2.0] - 2026-10-13
+
+### Added
+- **2D editing** (M9): the Scene-view collider tool now edits 2D colliders — picking (edge colliders are hollow), 2D box / circle / capsule resize handles, move in the plane, rotate around Z, and polygon / edge point editing (drag points, click **+** on an edge to insert, Ctrl+click to delete, **Simplify** with a tolerance in the overlay). Hold **V** to snap to the sprite outline.
+- Every edit operation works on 2D colliders and on mixed 3D + 2D selections (still one Undo step): duplicate, delete, mirror X / Y, merge → convex polygon / box, convert (Sphere → Circle, Convex → Polygon), refit to the sprite outline, inflate / deflate, lock, rename; the inspector's rows select 2D colliders in the tool.
+- **Painting on sprites**: sprites paint on a fine grid of their opaque pixels; painted regions build 2D colliders and regenerate identically (locked region colliders are kept).
+- **Tilemaps** (setting *Tilemap Colliders*): *Composite* — TilemapCollider2D + CompositeCollider2D + a static Rigidbody2D, all removed again by Remove; *Baked* — the tiles traced into one simplified polygon (holes included) or edge loops. A tilemap's own TilemapCollider2D is never modified.
+
 ## [1.1.0] - 2026-10-13
 
 ### Added

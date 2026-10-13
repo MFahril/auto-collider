@@ -25,7 +25,7 @@ namespace AutoCollider.Editor
         public void Apply(TargetResult result, GenerationSettings settings)
         {
             var target = result.Target;
-            if (target == null || result.ShapeCount == 0) return;
+            if (target == null || (result.ShapeCount == 0 && result.TilemapComposites.Count == 0)) return;
 
             var group = target.GetComponent<ColliderGroup>();
             if (group == null) group = Undo.AddComponent<ColliderGroup>(target);
@@ -70,6 +70,7 @@ namespace AutoCollider.Editor
             for (var i = 0; i < result.Shapes2D.Count; i++)
             {
                 var shape = result.Shapes2D[i];
+                if (shape.RegionId >= 0 && lockedRegions.Contains(shape.RegionId)) continue;
                 var collider2D = ColliderWriter2D.Create(shape, EnsureContainer2D(group), space);
                 if (collider2D == null) continue;
 
@@ -77,7 +78,8 @@ namespace AutoCollider.Editor
                 collider2D.sharedMaterial = settings.Material2D;
                 if (shape.Lod > 0) collider2D.enabled = false;
                 RecordGroup(group, Strings.UndoGenerate);
-                group.AddEntry(new ColliderEntry(collider2D, shape.Label, partOffset + i, generated: true, OwnsHost(collider2D, group))
+                var partId = shape.RegionId >= 0 ? shape.RegionId : partOffset + i;
+                group.AddEntry(new ColliderEntry(collider2D, shape.Label, partId, generated: true, OwnsHost(collider2D, group))
                     { Lod = shape.Lod });
                 result.CollidersCreated++;
             }
@@ -89,6 +91,13 @@ namespace AutoCollider.Editor
                 PrefabUtility.RecordPrefabInstancePropertyModifications(group);
 
             if (result.LodGroup != null) EnsureLodFollower(group, result.LodGroup);
+
+            var tilemapColliders = new List<Component>();
+            foreach (var tilemap in result.TilemapComposites)
+                if (!TilemapSetup.AddComposite(tilemap, group, settings, tilemapColliders))
+                    result.Warn(string.Format(Strings.WarningTilemapHasCollider, tilemap.name));
+            result.CollidersCreated += tilemapColliders.Count;
+            TilemapSetup.RemoveUnusedOwned(group);
         }
 
         private static void EnsureLodFollower(ColliderGroup group, LODGroup lodGroup)
@@ -125,11 +134,32 @@ namespace AutoCollider.Editor
             return entry;
         }
 
+        /// <summary>2D: create one collider for <paramref name="shape"/> on the 2D container and register it (edit tool, painted regions).</summary>
+        public ColliderEntry AddShape2D(ColliderGroup group, FittedShape2D shape, in TargetSpace space, Collider2D template = null, int partId = -1)
+        {
+            var collider = ColliderWriter2D.Create(shape, EnsureContainer2D(group), space);
+            if (collider == null) return null;
+
+            if (template != null)
+            {
+                collider.enabled = template.enabled;
+                collider.isTrigger = template.isTrigger;
+                collider.sharedMaterial = template.sharedMaterial;
+            }
+
+            var entry = new ColliderEntry(collider, shape.Label, partId, generated: true, OwnsHost(collider, group));
+            RecordGroup(group, Strings.UndoEditCollider);
+            group.AddEntry(entry);
+            EditorUtility.SetDirty(group);
+            return entry;
+        }
+
         /// <summary>Remove generated, unlocked colliders. Removes the container and the group when nothing is left.</summary>
         public static int RemoveGenerated(ColliderGroup group)
         {
             if (group == null) return 0;
             var removed = RemoveEntries(group, e => e.Generated && !e.Locked);
+            TilemapSetup.RemoveUnusedOwned(group);
             RecordGroup(group, Strings.UndoRemove);
             group.RemoveMissing();
 

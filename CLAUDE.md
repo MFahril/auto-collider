@@ -50,11 +50,13 @@ Packages/com.fahril.autocollider/
                                Voxelizer (Burst), ConvexDecomposer, PrimitiveReplacer, stats
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store,
                                RegionFitter (painted region → shapes, shared by paint tool + pipeline), BoneFitter (per-bone)
-    Generation2D/              FittedShape2D, Strategies2D (Auto 2D), GenerationPipeline2D (routing + fit), ColliderWriter2D
+    Generation2D/              FittedShape2D, Strategies2D (Auto 2D), GenerationPipeline2D (routing + fit), ColliderWriter2D,
+                               RegionFitter2D (painted 2D regions), TilemapSetup (Composite / Baked tilemaps)
     Editing/                   ColliderEditTool (EditorTool), ColliderOverlay, ColliderOperations (one Undo step each),
                                ColliderShapes (collider ↔ shape), ColliderPicker, ColliderEditState, ColliderDrawing,
                                VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer,
-                               PaintMesh (+ PaintMeshCache: world mesh, raycast, brush, grow), PaintDrawing (GL region tints)
+                               PaintMesh (+ PaintMeshCache: world mesh, raycast, brush, grow), PaintDrawing (GL region tints),
+                               ColliderShapes2D + ColliderOperations2D (2D counterparts; tool state is Component-based)
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
     Doctor/                    ColliderDoctor (scan + one-click fixes), DoctorIssue / DoctorCheck / DoctorSeverity
   Tests/Editor/                EditMode tests
@@ -84,7 +86,7 @@ Assets/Sample Model/           (empty) place real test models here
    One user action = **one Undo group** (`Undo.IncrementCurrentGroup` + `Undo.SetCurrentGroupName` + `Undo.CollapseUndoOperations`). Batch over 100 objects is still one Ctrl+Z.
    **Record right before you modify.** Any other Undo call (`AddComponent`, `RegisterCreatedObjectUndo`, `DestroyObjectImmediate`) flushes pending `RecordObject`s — a record taken *before* such a call captures "no change" and the later edit is silently lost on undo. Use `ColliderWriter.RecordGroup(group, …)` immediately before every `ColliderGroup` change, and change the group *before* destroying what it referenced.
    Tests that check undo must assert the restored state (entries, references) — after undoing a destroy, compare objects with Unity `==` (the C# wrapper is new), not `Is.SameAs`.
-5. **Only delete colliders we own** (registered in `ColliderGroup` with `generated == true`). Never wipe user-authored colliders unless the user explicitly picks "Replace existing colliders". Delete a collider's **GameObject** only when `ColliderEntry.OwnsGameObject` is set (we created it — container children, bone children); remove through `ColliderWriter.DestroyEntryCollider`.
+5. **Only delete colliders we own** (registered in `ColliderGroup` with `generated == true`). Never wipe user-authored colliders unless the user explicitly picks "Replace existing colliders". Delete a collider's **GameObject** only when `ColliderEntry.OwnsGameObject` is set (we created it — container children, bone children); remove through `ColliderWriter.DestroyEntryCollider`. Non-collider helpers we add (a tilemap composite's static `Rigidbody2D`) go in `ColliderGroup.OwnedComponents` and are removed with their colliders; a user's own components (e.g. their `TilemapCollider2D`) are never modified.
 6. Never silently change a user's **tag, layer, static flags, or transform**. Layer/tag assignment is opt-in and applies to generated collider objects only.
 7. Prefabs: modify instances with `PrefabUtility.RecordPrefabInstancePropertyModifications`; modify prefab assets with `PrefabUtility.LoadPrefabContents` → edit → `SaveAsPrefabAsset` → `UnloadPrefabContents`. Never edit a prefab asset through a scene instance by accident.
 8. Mark scenes dirty only through Undo / `EditorSceneManager.MarkSceneDirty` — never leave changes unsaved-but-invisible.
@@ -151,6 +153,8 @@ Use this when designing fitters, writers, and validators.
 - Unity's **generated** sprite physics shape and tight sprite mesh are coarse enclosing polygons (64 px disc → 9 points, +16 % radius): trace the pixels instead (RenderTexture blit — works without Read/Write). Custom physics shapes are only used when chosen explicitly.
 - Concave mesh-collider-style limits don't exist in 2D (any 2D collider works on a dynamic `Rigidbody2D`); a 2D collider under a 3D `Rigidbody` (or the reverse) never collides — different physics worlds.
 - Pixel staircases: enclosing fits see stair corners ~1 px outside the true curve — allow a pixel of slack (capsule caps) or the shape stretches.
+- Edit-tool state, picking and operations take `Component` (3D or 2D). Keep the typed 3D overloads (`IEnumerable<Collider>`) — tests and the 3D code call them — and route mixed selections through the `IEnumerable<Component>` overloads (one Undo group for both parts).
+- Tilemaps: `CompositeCollider2D` requires a `Rigidbody2D` — add the (static) body first, explicitly, so it is Undo-tracked and can be owned. Unity's sprite meshes are too coarse to paint or trace accurately — paint on the alpha-cell grid.
 
 **LODs**
 - Generate from **LOD0** by default. Optional `ColliderLodFollower` enables only the colliders for the active LOD.

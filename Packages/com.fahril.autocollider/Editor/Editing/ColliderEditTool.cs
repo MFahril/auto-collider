@@ -23,8 +23,12 @@ namespace AutoCollider.Editor
         private readonly BoxBoundsHandle _box = new();
         private readonly SphereBoundsHandle _sphere = new();
         private readonly CapsuleBoundsHandle _capsule = new();
+        private readonly BoxBoundsHandle _box2D = new() { axes = PrimitiveBoundsHandle.Axes.X | PrimitiveBoundsHandle.Axes.Y };
+        private readonly SphereBoundsHandle _circle2D = new() { axes = PrimitiveBoundsHandle.Axes.X | PrimitiveBoundsHandle.Axes.Y };
+        private readonly CapsuleBoundsHandle _capsule2D = new() { axes = PrimitiveBoundsHandle.Axes.X | PrimitiveBoundsHandle.Axes.Y };
         private readonly ColliderToolShortcutContext _shortcuts = new();
         private readonly Dictionary<ColliderGroup, Vector3[]> _snapVertices = new();
+        private readonly Dictionary<ColliderGroup, float2[]> _snapOutline = new();
         private GUIContent _icon;
 
         private bool _boxSelecting;
@@ -47,6 +51,9 @@ namespace AutoCollider.Editor
             _box.midpointHandleSizeFunction = size;
             _sphere.midpointHandleSizeFunction = size;
             _capsule.midpointHandleSizeFunction = size;
+            _box2D.midpointHandleSizeFunction = size;
+            _circle2D.midpointHandleSizeFunction = size;
+            _capsule2D.midpointHandleSizeFunction = size;
 
             ColliderEditState.Prune();
             ColliderToolCommands.ShowOverlay();
@@ -71,6 +78,7 @@ namespace AutoCollider.Editor
         private void ClearSnapCache()
         {
             _snapVertices.Clear();
+            _snapOutline.Clear();
             PaintMeshCache.Clear();
         }
 
@@ -189,7 +197,7 @@ namespace AutoCollider.Editor
                 var space = ColliderShapes.SpaceOf(group);
                 foreach (var entry in group.Entries)
                 {
-                    var c = entry.Collider;
+                    var c = entry.Component;
                     if (!ColliderEditState.IsVisible(c)) continue;
                     var selected = ColliderEditState.IsSelected(c);
                     ColliderDrawing.Draw(c, group, space, selected, xray, labels || selected);
@@ -201,8 +209,14 @@ namespace AutoCollider.Editor
 
         private void DrawActiveHandles(List<ColliderGroup> groups)
         {
-            var active = ColliderEditState.Active;
-            if (!ColliderEditState.IsVisible(active)) return;
+            var activeComponent = ColliderEditState.Active;
+            if (!ColliderEditState.IsVisible(activeComponent)) return;
+            if (activeComponent is Collider2D active2D)
+            {
+                if (ColliderShapes2D.TryFind(active2D, out var group2D, out _) && groups.Contains(group2D)) Handles2D(active2D, group2D);
+                return;
+            }
+            if (!(activeComponent is Collider active)) return;
             if (!ColliderShapes.TryFind(active, out var group, out _) || !groups.Contains(group)) return;
 
             var space = ColliderShapes.SpaceOf(group);
@@ -379,6 +393,225 @@ namespace AutoCollider.Editor
                 VertexSnapping.SnapPixels, out vertex);
         }
 
+        // ---------- 2D handles ----------
+
+        private void Handles2D(Collider2D active, ColliderGroup group)
+        {
+            var space = ColliderShapes.SpaceOf(group);
+            var shape = ColliderShapes2D.ToShape(active, group, space);
+            if (shape == null) return;
+            var z = ColliderShapes2D.PlaneZ(active, space);
+            var plane = Matrix4x4.TRS(group.transform.position, group.transform.rotation, Vector3.one) * Matrix4x4.Translate(new Vector3(0f, 0f, z));
+            var color = AutoColliderSettings.instance.Data.SelectedColor;
+
+            switch (ColliderEditState.HandleMode)
+            {
+                case ColliderHandleMode.Resize when shape.IsPolygonal:
+                    PointHandles(active, group, space, z, color);
+                    break;
+                case ColliderHandleMode.Resize:
+                    ResizeHandle2D(active, shape, group, space, plane, z, color);
+                    break;
+                case ColliderHandleMode.Move:
+                    MoveHandle2D(active, shape, group, space, z);
+                    break;
+                case ColliderHandleMode.Rotate when shape.Kind != ShapeKind2D.Circle:
+                    RotateHandle2D(active, shape, group, space, z);
+                    break;
+            }
+        }
+
+        private void ResizeHandle2D(Collider2D active, FittedShape2D shape, ColliderGroup group, in TargetSpace space, Matrix4x4 plane, float z, Color color)
+        {
+            var frame = plane * Matrix4x4.TRS(new Vector3(shape.Center.x, shape.Center.y, 0f), Quaternion.Euler(0f, 0f, shape.Angle), Vector3.one);
+            using (new Handles.DrawingScope(color, frame))
+            {
+                EditorGUI.BeginChangeCheck();
+                switch (shape.Kind)
+                {
+                    case ShapeKind2D.Box:
+                        _box2D.center = Vector3.zero;
+                        _box2D.size = new Vector3(shape.Size.x, shape.Size.y, 0f);
+                        _box2D.DrawHandle();
+                        break;
+                    case ShapeKind2D.Circle:
+                        _circle2D.center = Vector3.zero;
+                        _circle2D.radius = shape.Radius;
+                        _circle2D.DrawHandle();
+                        break;
+                    default:
+                        _capsule2D.center = Vector3.zero;
+                        _capsule2D.heightAxis = shape.Vertical ? CapsuleBoundsHandle.HeightAxis.Y : CapsuleBoundsHandle.HeightAxis.X;
+                        _capsule2D.radius = shape.Radius;
+                        _capsule2D.height = shape.Height;
+                        _capsule2D.DrawHandle();
+                        break;
+                }
+                if (!EditorGUI.EndChangeCheck()) return;
+
+                float2 localCenter;
+                switch (shape.Kind)
+                {
+                    case ShapeKind2D.Box:
+                    {
+                        float3 min = _box2D.center - _box2D.size * 0.5f;
+                        float3 max = _box2D.center + _box2D.size * 0.5f;
+                        if (TrySnapOutline(group, space, z, out var point))
+                            VertexSnapping.SnapChangedFaces(new float3(-shape.Size * 0.5f, 0f), new float3(shape.Size * 0.5f, 0f), ref min, ref max,
+                                (Vector3)frame.inverse.MultiplyPoint3x4(point));
+                        localCenter = ((min + max) * 0.5f).xy;
+                        shape.Size = math.max((max - min).xy, PhysicsLimits.MinExtent);
+                        break;
+                    }
+                    case ShapeKind2D.Circle:
+                        localCenter = ((float3)_circle2D.center).xy;
+                        shape.Radius = math.max(_circle2D.radius, PhysicsLimits.MinExtent);
+                        break;
+                    default:
+                        localCenter = ((float3)_capsule2D.center).xy;
+                        shape.Radius = math.max(_capsule2D.radius, PhysicsLimits.MinExtent);
+                        shape.Height = math.max(_capsule2D.height, 2f * shape.Radius);
+                        break;
+                }
+                var (u, v) = ColliderShapes2D.Axes(shape.Angle);
+                shape.Center += u * localCenter.x + v * localCenter.y;
+                ApplyAndTrack2D(active, shape, Strings.UndoResize);
+            }
+        }
+
+        private void MoveHandle2D(Collider2D active, FittedShape2D shape, ColliderGroup group, in TargetSpace space, float z)
+        {
+            var anchor = shape.IsPolygonal ? (float2)ColliderShapes2D.ToScaled(space, active.bounds.center) : shape.Center;
+            var center = ColliderShapes2D.ToWorld(space, anchor, z);
+            var rotation = Tools.pivotRotation == PivotRotation.Local ? group.transform.rotation * Quaternion.Euler(0f, 0f, shape.Angle) : Quaternion.identity;
+
+            EditorGUI.BeginChangeCheck();
+            var moved = Handles.PositionHandle(center, rotation);
+            if (!EditorGUI.EndChangeCheck()) return;
+            if (TrySnapOutline(group, space, z, out var snapped)) moved = snapped;
+
+            var delta = ColliderShapes2D.ToScaled(space, moved) - anchor;
+            shape.Center += delta;
+            if (shape.Paths != null) shape.Paths = Transformed(shape.Paths, p => p + delta);
+            ApplyAndTrack2D(active, shape, Strings.UndoMove);
+        }
+
+        private void RotateHandle2D(Collider2D active, FittedShape2D shape, ColliderGroup group, in TargetSpace space, float z)
+        {
+            var anchor = shape.IsPolygonal ? (float2)ColliderShapes2D.ToScaled(space, active.bounds.center) : shape.Center;
+            var center = ColliderShapes2D.ToWorld(space, anchor, z);
+            var normal = group.transform.forward;
+            var worldRotation = group.transform.rotation * Quaternion.Euler(0f, 0f, shape.Angle);
+
+            EditorGUI.BeginChangeCheck();
+            var rotated = Handles.Disc(worldRotation, center, normal, HandleUtility.GetHandleSize(center), false, 0f);
+            if (!EditorGUI.EndChangeCheck()) return;
+
+            (rotated * Quaternion.Inverse(worldRotation)).ToAngleAxis(out var degrees, out var axis);
+            if (Vector3.Dot(axis, normal) < 0f) degrees = -degrees;
+            if (math.abs(degrees) < 1e-4f) return;
+
+            if (!shape.IsPolygonal && !GenerationPipeline2D.IsUniform2D(space))
+            {
+                ColliderToolCommands.Notify(Strings.NotifyRotateNeedsUniformScale);
+                return;
+            }
+            shape.Angle += degrees;
+            if (shape.Paths != null)
+            {
+                var r = math.radians(degrees);
+                var (cos, sin) = (math.cos(r), math.sin(r));
+                shape.Paths = Transformed(shape.Paths, p =>
+                {
+                    var d = p - anchor;
+                    return anchor + new float2(d.x * cos - d.y * sin, d.x * sin + d.y * cos);
+                });
+            }
+            ApplyAndTrack2D(active, shape, Strings.UndoRotate);
+        }
+
+        /// <summary>Polygon / edge points: drag to move (V snaps to the sprite outline), "+" on an edge inserts, Ctrl+click deletes.</summary>
+        private void PointHandles(Collider2D active, ColliderGroup group, in TargetSpace space, float z, Color color)
+        {
+            var t = active.transform;
+            var deleting = EditorGUI.actionKey;
+            for (var path = 0; path < ColliderOperations2D.PathCount(active); path++)
+            {
+                var points = ColliderOperations2D.GetPath(active, path);
+                if (points == null) continue;
+                var closedEdge = ColliderOperations2D.IsClosed(active, path);
+                var count = closedEdge ? points.Length - 1 : points.Length;
+                var loops = active is PolygonCollider2D || closedEdge;
+                var plane = new Plane(t.forward, t.position);
+
+                for (var i = 0; i < count; i++)
+                {
+                    var world = t.TransformPoint(points[i] + active.offset);
+                    var size = HandleUtility.GetHandleSize(world) * 0.06f * AutoColliderSettings.instance.Data.HandleSize;
+
+                    if (deleting)
+                    {
+                        Handles.color = Color.red;
+                        if (Handles.Button(world, Quaternion.identity, size, size * 1.5f, Handles.DotHandleCap))
+                        {
+                            ColliderOperations2D.DeletePoint(active, path, i);
+                            GUIUtility.ExitGUI();
+                        }
+                        continue;
+                    }
+
+                    Handles.color = color;
+                    EditorGUI.BeginChangeCheck();
+                    var moved = Handles.FreeMoveHandle(world, size, Vector3.zero, Handles.DotHandleCap);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        if (TrySnapOutline(group, space, ColliderShapes2D.PlaneZ(active, space), out var snapped)) moved = snapped;
+                        ColliderOperations2D.MovePoint(active, path, i, plane.ClosestPointOnPlane(moved));
+                    }
+
+                    // Insert handles at edge midpoints.
+                    if (!loops && i == count - 1) continue;
+                    var next = t.TransformPoint(points[(i + 1) % count] + active.offset);
+                    var mid = (world + next) * 0.5f;
+                    Handles.color = new Color(color.r, color.g, color.b, 0.6f);
+                    if (Handles.Button(mid, Quaternion.identity, size * 0.6f, size, Handles.DotHandleCap))
+                    {
+                        ColliderOperations2D.InsertPoint(active, path, i, mid);
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+        }
+
+        private static float2[][] Transformed(float2[][] paths, System.Func<float2, float2> f)
+        {
+            var result = new float2[paths.Length][];
+            for (var p = 0; p < paths.Length; p++)
+            {
+                result[p] = new float2[paths[p].Length];
+                for (var i = 0; i < paths[p].Length; i++) result[p][i] = f(paths[p][i]);
+            }
+            return result;
+        }
+
+        private static void ApplyAndTrack2D(Collider2D active, FittedShape2D shape, string undoName)
+        {
+            var result = ColliderOperations2D.Apply(active, shape, undoName);
+            ColliderEditState.Replace(active, result);
+        }
+
+        /// <summary>While V is held, the 2D source-outline point nearest to the mouse (screen space), in world space at plane Z.</summary>
+        private bool TrySnapOutline(ColliderGroup group, in TargetSpace space, float z, out Vector3 point)
+        {
+            point = default;
+            if (!ColliderToolShortcuts.VertexSnapHeld) return false;
+            if (!_snapOutline.TryGetValue(group, out var outline))
+                _snapOutline[group] = outline = ColliderOperations2D.SourcePoints(group, space);
+            var world = new Vector3[outline.Length];
+            for (var i = 0; i < world.Length; i++) world[i] = ColliderShapes2D.ToWorld(space, outline[i], z);
+            return VertexSnapping.TryNearest(world, Event.current.mousePosition, HandleUtility.WorldToGUIPoint, VertexSnapping.SnapPixels, out point);
+        }
+
         // ---------- Picking ----------
 
         private void HandlePicking(Event e, List<ColliderGroup> groups)
@@ -409,7 +642,7 @@ namespace AutoCollider.Editor
                 {
                     GUIUtility.hotControl = 0;
                     var op = e.shift ? SelectOp.Add : EditorGUI.actionKey ? SelectOp.Toggle : SelectOp.Replace;
-                    var candidates = ColliderShapes.CollidersOf(groups).Where(ColliderEditState.IsVisible).ToList();
+                    var candidates = ColliderShapes.ComponentsOf(groups).Where(ColliderEditState.IsVisible).ToList();
 
                     if (_boxSelecting)
                     {

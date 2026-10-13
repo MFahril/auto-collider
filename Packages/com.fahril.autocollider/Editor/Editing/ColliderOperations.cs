@@ -308,16 +308,122 @@ namespace AutoCollider.Editor
             return 0;
         });
 
+        // ---------- Mixed selections (3D Collider + Collider2D), one Undo step each ----------
+
+        public static List<Component> Duplicate(IEnumerable<Component> colliders) => Run(Strings.UndoDuplicate, () =>
+            Join(Of3D(colliders).Count > 0 ? Duplicate(Of3D(colliders)) : null, ColliderOperations2D.Duplicate(Of2D(colliders))));
+
+        public static int Delete(IEnumerable<Component> colliders) => Run(Strings.UndoDelete, () =>
+        {
+            var count = Of3D(colliders).Count > 0 ? Delete(Of3D(colliders)) : 0;
+            foreach (var c in Of2D(colliders))
+            {
+                if (!ColliderShapes2D.TryFind(c, out var group, out var entry)) continue;
+                ColliderWriter.RecordGroup(group, Strings.UndoDelete);
+                group.RemoveEntry(entry);
+                ColliderWriter.DestroyEntryCollider(entry, group.Container2D);
+                count++;
+            }
+            return count;
+        });
+
+        public static List<Component> Mirror(IEnumerable<Component> colliders, int axis) => Run(Strings.UndoMirror, () =>
+            Join(Of3D(colliders).Count > 0 ? Mirror(Of3D(colliders), axis) : null, ColliderOperations2D.Mirror(Of2D(colliders), axis)));
+
+        public static List<Component> Merge(IEnumerable<Component> colliders, MergeKind kind) => Run(Strings.UndoMerge, () =>
+            Join(Of3D(colliders).Count > 0 ? Merge(Of3D(colliders), kind) : null, ColliderOperations2D.Merge(Of2D(colliders), kind)));
+
+        /// <summary>Convert: 2D colliders map Sphere → Circle and Convex → (convex) Polygon.</summary>
+        public static List<Component> Convert(IEnumerable<Component> colliders, ShapeKind kind) => Run(Strings.UndoConvert, () =>
+            Join(Of3D(colliders).Count > 0 ? Convert(Of3D(colliders), kind) : null, ColliderOperations2D.Convert(Of2D(colliders), To2D(kind))));
+
+        public static int Refit(IEnumerable<Component> colliders) => Run(Strings.UndoRefit, () =>
+            (Of3D(colliders).Count > 0 ? Refit(Of3D(colliders)) : 0) + ColliderOperations2D.Refit(Of2D(colliders)));
+
+        public static void Inflate(IEnumerable<Component> colliders, float amount) => Run(Strings.UndoInflate, () =>
+        {
+            if (Of3D(colliders).Count > 0) Inflate(Of3D(colliders), amount);
+            ColliderOperations2D.Inflate(Of2D(colliders), amount);
+            return 0;
+        });
+
+        public static void SetLocked(IEnumerable<Component> colliders, bool locked) => Run(Strings.UndoLock, () =>
+        {
+            foreach (var c in colliders.Distinct())
+            {
+                if (!TryFindAny(c, out var group, out var entry)) continue;
+                Undo.RecordObject(group, Strings.UndoLock);
+                entry.Locked = locked;
+                EditorUtility.SetDirty(group);
+            }
+            return 0;
+        });
+
+        public static void Rename(Component collider, string label)
+        {
+            if (collider is Collider c3)
+            {
+                Rename(c3, label);
+                return;
+            }
+            Run(Strings.UndoRename, () =>
+            {
+                if (!(collider is Collider2D c2) || !ColliderShapes2D.TryFind(c2, out var group, out var entry) || string.IsNullOrWhiteSpace(label)) return 0;
+                Undo.RecordObject(group, Strings.UndoRename);
+                entry.Label = label.Trim();
+                EditorUtility.SetDirty(group);
+                if (ColliderShapes2D.IsDedicatedChild(c2, group))
+                {
+                    Undo.RecordObject(c2.gameObject, Strings.UndoRename);
+                    c2.gameObject.name = entry.Label;
+                }
+                return 0;
+            });
+        }
+
+        /// <summary>The group and entry of a 3D or 2D collider.</summary>
+        public static bool TryFindAny(Component collider, out ColliderGroup group, out ColliderEntry entry)
+        {
+            group = null;
+            entry = null;
+            return collider switch
+            {
+                Collider c3 => ColliderShapes.TryFind(c3, out group, out entry),
+                Collider2D c2 => ColliderShapes2D.TryFind(c2, out group, out entry),
+                _ => false,
+            };
+        }
+
+        public static ShapeKind2D To2D(ShapeKind kind) => kind switch
+        {
+            ShapeKind.Box => ShapeKind2D.Box,
+            ShapeKind.Sphere => ShapeKind2D.Circle,
+            ShapeKind.Capsule => ShapeKind2D.Capsule,
+            _ => ShapeKind2D.Polygon,
+        };
+
+        private static List<Collider> Of3D(IEnumerable<Component> colliders) => colliders.OfType<Collider>().Where(c => c != null).ToList();
+
+        private static List<Collider2D> Of2D(IEnumerable<Component> colliders) => colliders.OfType<Collider2D>().Where(c => c != null).ToList();
+
+        private static List<Component> Join(IEnumerable<Collider> created3D, List<Component> created2D)
+        {
+            var result = new List<Component>();
+            if (created3D != null) result.AddRange(created3D);
+            result.AddRange(created2D);
+            return result;
+        }
+
         // ---------- Painted regions ----------
 
         /// <summary>
         /// Turn painted triangles into regions (one per renderer) stored in each group's recipe, and build their colliders —
         /// exactly as generation will rebuild them later. One Undo step.
         /// </summary>
-        public static List<Collider> CreateRegions(IReadOnlyDictionary<Renderer, HashSet<int>> painted, PartShape shape) =>
+        public static List<Component> CreateRegions(IReadOnlyDictionary<Renderer, HashSet<int>> painted, PartShape shape) =>
             Run(Strings.UndoCreateRegion, () =>
             {
-                var created = new List<Collider>();
+                var created = new List<Component>();
                 var writer = Writer(out var store);
                 foreach (var pair in painted)
                 {
@@ -330,6 +436,17 @@ namespace AutoCollider.Editor
 
                     var settings = group.Recipe.Settings;
                     var space = ColliderShapes.SpaceOf(group);
+                    if (GenerationPipeline2D.Is2D(renderer, group.gameObject, settings))
+                    {
+                        RegionFitter2D.PaintGeometry(renderer, settings, space, out var vertices, out var triangles);
+                        var context2D = new FitContext(settings.AllowRotation && GenerationPipeline2D.IsUniform2D(space));
+                        foreach (var fitted in RegionFitter2D.Fit(region, vertices, triangles, settings, context2D, out _))
+                        {
+                            var entry = writer.AddShape2D(group, fitted, space, null, region.Id);
+                            if (entry != null) created.Add(entry.Collider2D);
+                        }
+                        continue;
+                    }
                     var context = GenerationPipeline.CreateContext(group.gameObject, settings, space);
                     var shapes = RegionFitter.Fit(region, MeshSource.Read(renderer, space), settings, context, out _);
                     foreach (var fitted in shapes)

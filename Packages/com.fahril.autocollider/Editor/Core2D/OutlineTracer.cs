@@ -78,7 +78,10 @@ namespace AutoCollider.Editor
             Polygon2D.Bounds(loops, out var min, out var max);
             var raster = into ?? Raster.Over(min, max, resolution);
             var crossings = new List<float>();
-            for (var y = 0; y < raster.Height; y++)
+            // Only the rows the loops reach (many small loops go into one big raster, e.g. tiles).
+            var yFrom = math.max(0, (int)math.floor((min.y - raster.Origin.y) / raster.CellSize - 0.5f));
+            var yTo = math.min(raster.Height - 1, (int)math.ceil((max.y - raster.Origin.y) / raster.CellSize - 0.5f));
+            for (var y = yFrom; y <= yTo; y++)
             {
                 var cy = raster.Origin.y + (y + 0.5f) * raster.CellSize;
                 crossings.Clear();

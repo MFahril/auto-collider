@@ -26,6 +26,9 @@ namespace AutoCollider.Editor
         /// <summary>2D shapes (sprites, flat meshes) — written as Collider2D components.</summary>
         public List<FittedShape2D> Shapes2D { get; } = new();
 
+        /// <summary>Tilemaps that get live Composite colliders (Tilemap Colliders = Composite).</summary>
+        public List<UnityEngine.Tilemaps.Tilemap> TilemapComposites { get; } = new();
+
         /// <summary>3D + 2D shapes.</summary>
         public int ShapeCount => Shapes.Count + Shapes2D.Count;
         public List<string> Warnings { get; } = new();

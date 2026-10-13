@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M8 done — 1.1.0** (2D generation); 2D editing / runtime planned as M9–M10 (see §5.7, §8) — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M9 done — 1.2.0** (2D generation, editing, painting, tilemaps); 2D runtime planned as M10 (see §5.7, §8) — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -376,7 +376,7 @@ public class ColliderGroup : MonoBehaviour {
 
 ### 5.7 2D (sprites, flat meshes, tilemaps, sprite skeletons)
 
-*M8 (generation) implemented; M9 (editing, painting, tilemaps) and M10 (2D events, skeletons, sprite swaps, Doctor) planned.*
+*M8 (generation) and M9 (editing, painting, tilemaps) implemented; M10 (2D events, skeletons, sprite swaps, Doctor) planned.*
 
 **One group for both kinds.** `ColliderEntry` holds a `Collider` **or** a `Collider2D` (generic `Component`, `IsAlive`, `Enabled`, `IsTrigger`, `Bounds`); the bulk API, lookup and inspector handle both. Unity refuses a `Collider2D` on a GameObject that has a 3D `Collider` (and vice versa), so 2D colliders live on their own container, `[Colliders 2D]` (`ColliderGroup.Container2D`); rotated 2D boxes / capsules get their own child rotated around Z.
 
@@ -388,6 +388,12 @@ public class ColliderGroup : MonoBehaviour {
 - `SpriteSource`: Auto traces the opaque pixels — Unity's generated physics shapes / tight meshes are coarse enclosing polygons (a 64 px disc: 9 points, radius +16 %); falls back to the physics shape (custom shapes: pick *Physics Shape*), then the mesh boundary. Pixels are read through a temporary RenderTexture blit (no Read/Write). Sliced / tiled sprites use `renderer.size`. Per-batch cache by sprite + source settings.
 - Flat meshes: `MeshSource.Read` triangles projected to XY, rasterized (Burst) and traced — the union silhouette.
 - `OutlineTracer`: raster → directed boundary edges with the solid on the left; at a pinch vertex take the left turn (stays on the piece) so diagonal cells don't merge; collapse straight runs. `PolygonSimplifier`: closed Douglas–Peucker anchored at the lowest point + its farthest point; a loop that would self-intersect, cross an earlier loop or flip winding retries at half tolerance (5×), else stays unsimplified. Tolerance = diagonal × lerp(2 %, 0.15 %, Quality); islands < Min Island Size × diagonal are dropped.
+
+**Editing (M9).** The edit tool works on `Component`s (a 3D `Collider` or a `Collider2D`); `ColliderOperations` has mixed-selection overloads that send the 3D part to the existing code and the 2D part to `ColliderOperations2D` inside one Undo group. `ColliderShapes2D` converts `Collider2D` ↔ `FittedShape2D` exactly (offset, size × |scale|, the host's angle around the group's Z, polygon paths through the host transform). `Apply` updates in place when the kind matches and the shape keeps the host's angle (polygons always), else rebuilds on `[Colliders 2D]` and re-points the same entry. Picking: ray ∩ the collider's plane, then `OverlapPoint`; edges are hollow and hit within a few pixels. Handles: Unity's bounds handles restricted to X / Y, `Handles.Disc` around Z, and point handles for polygons / edges (drag; "+" at edge midpoints inserts; Ctrl+click deletes; V snaps to the source outline). Tilemap / composite colliders are selectable but not shape-edited.
+
+**Painting (M9).** Unity's sprite meshes are too coarse to paint (a disc is 8 vertices), so sprites paint on a grid of their opaque alpha cells (two triangles per cell, row-major — the indices regions store); flat meshes paint on their triangles. `RegionFitter2D` rasterizes the painted triangles, traces them and fits the region's shape (Box / Circle / Capsule / Convex Polygon / Polygon / Auto 2D); generation calls the same code, so regions regenerate identically.
+
+**Tilemaps (M9, `TilemapSetup`).** *Composite* (default): `TilemapCollider2D` (composite operation Merge) + `CompositeCollider2D` (polygons) + a static `Rigidbody2D` when the tilemap has none — that body is a non-collider component the tool created, tracked in `ColliderGroup.OwnedComponents` and destroyed once no composite needs it. A user's own `TilemapCollider2D` is never touched (warning). *Baked*: the tiles are rasterized directly — grid tiles fill their cells exactly; sprite tiles use their physics shape through the tile's transform at 4 sub-cells — then traced and simplified (tolerance ≤ 0.2 % of the size, so corners survive) into one owned polygon with holes, or edge loops. Only rectangular grids bake; others fall back to Composite.
 
 **Fitting** (`Strategies2D`): Box (AABB, or min-area rectangle when rotation is allowed and ≥ 3 % tighter), Circle (Welzl), Capsule (X / Y / principal axis; 4 % cap slack for pixel stair corners; near-circular capsules become circles), Convex Polygon (simplified hull), Polygon (simplified outline + holes), Edge (one closed `EdgeCollider2D` per loop). **Auto 2D:** best primitive (cheaper wins within 2 %) if it fills ≥ Primitive Fit Threshold of it → convex polygon if area ÷ hull area ≥ Convexity Threshold → simplified polygon (`PolygonCollider2D` decomposes it into convex pieces itself). Combined granularity unions the outlines on one raster. Inflate grows primitives analytically and offsets polygons (miter, clamped).
 
@@ -503,7 +509,7 @@ Each milestone ends compiling clean (zero console errors) with its tests green �
 | **M6** Runtime ✅ | `ColliderGroup` events + `ColliderRelay`, bulk API, `AnimatedMeshCollider`, `ColliderLodFollower` | Play-mode test: events fire with correct entry; animated collider throttles per settings |
 | **M7** Polish ✅ | Collider Doctor + fixes, hierarchy badge, `Documentation~` manual, `Samples~/Demo`, perf pass (1k-object batch), UI polish both skins | Doctor finds & fixes seeded issues; docs + sample importable via Package Manager |
 | **M8** 2D core ✅ | `ColliderEntry` holds `Collider` or `Collider2D`; `Dimension` / `Strategy2D` / outline settings; `Core2D` (sprite / flat-mesh outlines, Burst raster + marching squares, Douglas–Peucker, box / circle / capsule 2D fitters); `GenerationPipeline2D` + `ColliderWriter2D`; 2D preview, inspector rows | Sprites / flat meshes get fitting 2D colliders in one Undo step |
-| **M9** 2D editing | `ColliderShapes2D`, 2D ops + handles + polygon point editing, 2D painting, tilemaps (Composite / Baked) | Every 2D collider editable, one Undo per action; tilemaps set up or baked in one click |
+| **M9** 2D editing ✅ | `ColliderShapes2D`, 2D ops + handles + polygon point editing, 2D painting, tilemaps (Composite / Baked) | Every 2D collider editable, one Undo per action; tilemaps set up or baked in one click |
 | **M10** 2D runtime | 2D group events + relays (`otherCollider`, `IsTouching`), sprite skeletons (`BoneFitter2D`, SpriteSkin via reflection), `SpriteColliderSwitcher`, Doctor 2D, Demo2D sample, docs | Events report the right part; Doctor fixes seeded 2D issues; sample plays |
 
 ---

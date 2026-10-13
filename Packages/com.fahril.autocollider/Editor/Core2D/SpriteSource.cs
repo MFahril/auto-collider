@@ -163,7 +163,18 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>Trace the opaque pixels (alpha ≥ threshold), at most <paramref name="resolution"/> cells along the longest side.</summary>
-        public static List<float2[]> AlphaOutline(Sprite sprite, float threshold, int resolution, ICollection<string> warnings)
+        /// <summary>Opaque cells of a sprite in sprite units (relative to the pivot), at most <c>resolution</c> cells along the longest side.</summary>
+        internal sealed class AlphaMask
+        {
+            public bool[] Cells;
+            public int Width, Height;
+            public float2 Origin;
+            public float CellSize;
+            /// <summary>Upper corner of the readable pixel area (cells may extend past it).</summary>
+            public float2 Max;
+        }
+
+        public static AlphaMask ReadAlphaMask(Sprite sprite, float threshold, int resolution, ICollection<string> warnings)
         {
             Rect textureRect;
             Vector2 rectOffset;
@@ -197,14 +208,70 @@ namespace AutoCollider.Editor
 
             var ppu = sprite.pixelsPerUnit;
             var origin = ((float2)(Vector2)rectOffset - (float2)(Vector2)sprite.pivot) / ppu;
-            var loops = OutlineTracer.Trace(OutlineTracer.FromMask(mask, w, h, origin, step / ppu));
+            return new AlphaMask
+            {
+                Cells = mask, Width = w, Height = h, Origin = origin, CellSize = step / ppu,
+                Max = origin + new float2(width, height) / ppu,
+            };
+        }
+
+        public static List<float2[]> AlphaOutline(Sprite sprite, float threshold, int resolution, ICollection<string> warnings)
+        {
+            var mask = ReadAlphaMask(sprite, threshold, resolution, warnings);
+            if (mask == null) return null;
+            var loops = OutlineTracer.Trace(OutlineTracer.FromMask(mask.Cells, mask.Width, mask.Height, mask.Origin, mask.CellSize));
             // Cells past the texture edge would make the outline overshoot the sprite: clamp to the readable rectangle.
-            var max = origin + new float2(width, height) / ppu;
             for (var i = 0; i < loops.Count; i++)
                 for (var p = 0; p < loops[i].Length; p++)
-                    loops[i][p] = math.clamp(loops[i][p], origin, max);
+                    loops[i][p] = math.clamp(loops[i][p], mask.Origin, mask.Max);
             return loops;
         }
+
+        /// <summary>
+        /// Paintable triangles of a sprite, in sprite units: two per opaque cell of its alpha mask (row-major, deterministic —
+        /// painted regions store these indices). Unity's own sprite meshes are far too coarse to paint (a disc has 8 vertices).
+        /// Falls back to the sprite mesh for tightly packed atlas sprites.
+        /// </summary>
+        public static void PaintTriangles(SpriteRenderer renderer, GenerationSettings settings, out float2[] vertices, out int[] triangles)
+        {
+            var sprite = renderer.sprite;
+            var mask = renderer.drawMode == SpriteDrawMode.Simple ? ReadAlphaMask(sprite, settings.AlphaThreshold, settings.OutlineResolution, null) : null;
+            if (mask == null)
+            {
+                var source = sprite.vertices;
+                vertices = new float2[source.Length];
+                for (var i = 0; i < vertices.Length; i++) vertices[i] = source[i];
+                var indices = sprite.triangles;
+                triangles = new int[indices.Length];
+                for (var i = 0; i < triangles.Length; i++) triangles[i] = indices[i];
+                return;
+            }
+
+            var verts = new List<float2>();
+            var tris = new List<int>();
+            for (var y = 0; y < mask.Height; y++)
+            for (var x = 0; x < mask.Width; x++)
+            {
+                if (!mask.Cells[y * mask.Width + x]) continue;
+                var min = math.min(mask.Origin + new float2(x, y) * mask.CellSize, mask.Max);
+                var max = math.min(mask.Origin + new float2(x + 1, y + 1) * mask.CellSize, mask.Max);
+                var b = verts.Count;
+                verts.Add(min);
+                verts.Add(new float2(max.x, min.y));
+                verts.Add(max);
+                verts.Add(new float2(min.x, max.y));
+                tris.AddRange(new[] { b, b + 1, b + 2, b, b + 2, b + 3 });
+            }
+            vertices = verts.ToArray();
+            triangles = tris.ToArray();
+        }
+
+        /// <summary>Sprite units → the target's 2D space (renderer transform, flips).</summary>
+        public static Matrix4x4 SpriteToScaled(SpriteRenderer renderer, in TargetSpace space) =>
+            (Matrix4x4)space.WorldToScaled * renderer.transform.localToWorldMatrix * Flip(renderer);
+
+        /// <summary>Sprite units → world.</summary>
+        public static Matrix4x4 SpriteToWorld(SpriteRenderer renderer) => renderer.transform.localToWorldMatrix * Flip(renderer);
 
         private static Color32[] ReadPixels(Texture2D texture, Rect rect, int width, int height)
         {

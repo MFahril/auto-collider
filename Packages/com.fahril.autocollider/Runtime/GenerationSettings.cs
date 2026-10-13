@@ -120,6 +120,9 @@ namespace AutoCollider
         [Tooltip("2D physics material assigned to generated 2D colliders (optional).")]
         public PhysicsMaterial2D Material2D;
 
+        [Tooltip("Tilemaps — Composite: Unity's live TilemapCollider2D merged by a CompositeCollider2D (follows tile edits). Baked: the tiles' outline traced and baked into simplified polygon colliders.")]
+        public TilemapColliderMode TilemapColliders = TilemapColliderMode.Composite;
+
         /// <summary>Deep copy (the material reference is shared).</summary>
         public GenerationSettings Clone() => (GenerationSettings)MemberwiseClone();
     }

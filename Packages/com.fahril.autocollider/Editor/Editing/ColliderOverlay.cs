@@ -87,6 +87,13 @@ namespace AutoCollider.Editor
             Action(fit, "+", Strings.ActionInflateTooltip, () => ColliderToolCommands.Inflate(Mathf.Abs(_step.value)));
             Action(fit, "−", Strings.ActionDeflateTooltip, () => ColliderToolCommands.Inflate(-Mathf.Abs(_step.value)));
 
+            _polygonRow = Row(_selectionActions);
+            Caption(_polygonRow, Strings.CaptionPolygon);
+            _simplifyTolerance = new FloatField { value = 0.02f, tooltip = Strings.SimplifyToleranceTooltip };
+            _simplifyTolerance.AddToClassList("ac-overlay__step");
+            _polygonRow.Add(_simplifyTolerance);
+            Action(_polygonRow, Strings.ActionSimplify, Strings.ActionSimplifyTooltip, () => ColliderToolCommands.SimplifyActive(Mathf.Abs(_simplifyTolerance.value)));
+
             BuildPaintSection(root);
 
             var view = Row(root);
@@ -109,7 +116,8 @@ namespace AutoCollider.Editor
             return root;
         }
 
-        private VisualElement _handlesRow, _paintSection, _regionList;
+        private VisualElement _handlesRow, _paintSection, _regionList, _polygonRow;
+        private FloatField _simplifyTolerance;
         private Label _paintSummary;
         private SliderInt _brush;
         private VisualElement _createRow;
@@ -208,9 +216,12 @@ namespace AutoCollider.Editor
             var selected = ColliderEditState.Selected.Where(c => c != null).ToList();
             var active = ColliderEditState.Active;
             _summary.text = ColliderEditState.Summary();
+            var polygon2D = active is PolygonCollider2D || active is EdgeCollider2D;
             _hint.text = selected.Count == 0 ? Strings.ToolPickHint
                 : active is MeshCollider && handle == ColliderHandleMode.Resize && mode == ColliderToolMode.Edit ? Strings.ToolMeshResizeHint
+                : polygon2D && handle == ColliderHandleMode.Resize && mode == ColliderToolMode.Edit ? Strings.ToolPolygonHint
                 : Strings.ToolEditHint;
+            _polygonRow.EnableInClassList("ac-hidden", !polygon2D);
 
             _selectionActions.EnableInClassList("ac-hidden", selected.Count == 0 || painting);
             _summary.EnableInClassList("ac-hidden", painting);
@@ -218,12 +229,12 @@ namespace AutoCollider.Editor
             _mergeHull.SetEnabled(selected.Count > 1);
             _mergeBox.SetEnabled(selected.Count > 1);
 
-            var entryLocked = selected.Count > 0 && selected.All(c => ColliderShapes.TryFind(c, out _, out var e) && e.Locked);
+            var entryLocked = selected.Count > 0 && selected.All(c => ColliderOperations.TryFindAny(c, out _, out var e) && e.Locked);
             _lock.text = entryLocked ? Strings.ActionUnlock : Strings.ActionLock;
             _solo.text = ColliderEditState.IsSoloing ? Strings.ActionUnsolo : Strings.ActionSolo;
 
             _rename.SetEnabled(selected.Count == 1);
-            _rename.SetValueWithoutNotify(selected.Count == 1 && ColliderShapes.TryFind(active, out _, out var activeEntry) ? activeEntry.Label : string.Empty);
+            _rename.SetValueWithoutNotify(selected.Count == 1 && ColliderOperations.TryFindAny(active, out _, out var activeEntry) ? activeEntry.Label : string.Empty);
             _xray.SetValueWithoutNotify(ColliderEditState.Xray);
             _labels.SetValueWithoutNotify(ColliderEditState.ShowLabels);
         }

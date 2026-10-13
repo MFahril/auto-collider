@@ -17,6 +17,7 @@ namespace AutoCollider
         [SerializeField] private Transform _container;
         [SerializeField] private Transform _container2D;
         [SerializeField] private GenerationRecipe _recipe = new();
+        [SerializeField] private List<Component> _ownedComponents = new();
 
         private Dictionary<Component, ColliderEntry> _lookup;
         private TriggerPairs _triggerPairs;
@@ -334,6 +335,12 @@ namespace AutoCollider
             _lookup = null;
             return _entries.Remove(entry);
         }
+
+        /// <summary>
+        /// Non-collider components Auto Collider added for its colliders (e.g. the static Rigidbody2D a tilemap's
+        /// CompositeCollider2D needs); removed together with the colliders.
+        /// </summary>
+        internal List<Component> OwnedComponents => _ownedComponents ??= new List<Component>();
 
         /// <summary>Drop entries whose collider was deleted outside the tool. Returns the number removed.</summary>
         internal int RemoveMissing()

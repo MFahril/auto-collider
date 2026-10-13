@@ -254,7 +254,7 @@ namespace AutoCollider.Editor
 
         public static Vector3 ToWorld(in TargetSpace space, float3 scaled) => math.transform(space.ScaledToWorld, scaled);
 
-        /// <summary>All tracked, live colliders of the groups.</summary>
+        /// <summary>All tracked, live 3D colliders of the groups.</summary>
         public static IEnumerable<Collider> CollidersOf(IEnumerable<ColliderGroup> groups)
         {
             foreach (var group in groups)
@@ -262,6 +262,20 @@ namespace AutoCollider.Editor
                 if (group == null) continue;
                 foreach (var entry in group.Entries)
                     if (entry.Collider != null) yield return entry.Collider;
+            }
+        }
+
+        /// <summary>All tracked, live colliders of the groups — 3D and 2D.</summary>
+        public static IEnumerable<Component> ComponentsOf(IEnumerable<ColliderGroup> groups)
+        {
+            foreach (var group in groups)
+            {
+                if (group == null) continue;
+                foreach (var entry in group.Entries)
+                {
+                    var component = entry.Component;
+                    if (component != null) yield return component;
+                }
             }
         }
     }

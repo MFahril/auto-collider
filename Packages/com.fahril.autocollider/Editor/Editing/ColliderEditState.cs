@@ -33,9 +33,9 @@ namespace AutoCollider.Editor
     /// </summary>
     internal static class ColliderEditState
     {
-        private static readonly List<Collider> SelectedList = new();
-        private static readonly HashSet<Collider> Hidden = new();
-        private static HashSet<Collider> _soloSet;
+        private static readonly List<Component> SelectedList = new();
+        private static readonly HashSet<Component> Hidden = new();
+        private static HashSet<Component> _soloSet;
         private static bool? _xray;
         private static bool? _labels;
 
@@ -44,10 +44,10 @@ namespace AutoCollider.Editor
         public static ColliderToolMode Mode { get; private set; } = ColliderToolMode.Edit;
         public static ColliderHandleMode HandleMode { get; private set; } = ColliderHandleMode.Resize;
 
-        public static IReadOnlyList<Collider> Selected => SelectedList;
+        public static IReadOnlyList<Component> Selected => SelectedList;
 
-        /// <summary>The most recently selected collider (gets the handles).</summary>
-        public static Collider Active => SelectedList.Count > 0 ? SelectedList[SelectedList.Count - 1] : null;
+        /// <summary>The most recently selected collider — a Collider or a Collider2D (gets the handles).</summary>
+        public static Component Active => SelectedList.Count > 0 ? SelectedList[SelectedList.Count - 1] : null;
 
         public static bool Xray
         {
@@ -123,11 +123,11 @@ namespace AutoCollider.Editor
             NotifyChanged();
         }
 
-        public static bool IsSelected(Collider c) => c != null && SelectedList.Contains(c);
+        public static bool IsSelected(Component c) => c != null && SelectedList.Contains(c);
 
-        public static void Select(Collider collider, SelectOp op = SelectOp.Replace) => Select(new[] { collider }, op);
+        public static void Select(Component collider, SelectOp op = SelectOp.Replace) => Select(new[] { collider }, op);
 
-        public static void Select(IEnumerable<Collider> colliders, SelectOp op = SelectOp.Replace)
+        public static void Select(IEnumerable<Component> colliders, SelectOp op = SelectOp.Replace)
         {
             if (op == SelectOp.Replace) SelectedList.Clear();
             foreach (var c in colliders)
@@ -148,7 +148,7 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>Swap a collider that an operation rebuilt (keeps selection and visibility).</summary>
-        public static void Replace(Collider oldCollider, Collider newCollider)
+        public static void Replace(Component oldCollider, Component newCollider)
         {
             if (oldCollider == newCollider || newCollider == null) return;
             var index = SelectedList.IndexOf(oldCollider);
@@ -167,9 +167,9 @@ namespace AutoCollider.Editor
             if (removed > 0) NotifyChanged();
         }
 
-        public static bool IsVisible(Collider c) => c != null && !Hidden.Contains(c) && (_soloSet == null || _soloSet.Contains(c));
+        public static bool IsVisible(Component c) => c != null && !Hidden.Contains(c) && (_soloSet == null || _soloSet.Contains(c));
 
-        public static void Hide(IEnumerable<Collider> colliders)
+        public static void Hide(IEnumerable<Component> colliders)
         {
             foreach (var c in colliders) if (c != null) Hidden.Add(c);
             SelectedList.RemoveAll(Hidden.Contains);
@@ -179,7 +179,7 @@ namespace AutoCollider.Editor
         /// <summary>Show only the selected colliders; toggles back when already soloing.</summary>
         public static void ToggleSolo()
         {
-            _soloSet = _soloSet == null && SelectedList.Count > 0 ? new HashSet<Collider>(SelectedList) : null;
+            _soloSet = _soloSet == null && SelectedList.Count > 0 ? new HashSet<Component>(SelectedList) : null;
             NotifyChanged();
         }
 

@@ -100,6 +100,7 @@ namespace AutoCollider.Editor
             twoD.Add(Field(settings, nameof(GenerationSettings.AlphaThreshold)));
             twoD.Add(Field(settings, nameof(GenerationSettings.OutlineResolution)));
             twoD.Add(Field(settings, nameof(GenerationSettings.Material2D)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.TilemapColliders)));
 
             var decomposition = Foldout(this, Strings.SectionDecomposition, "AutoCollider.Generate.Decomposition");
             var decompositionHint = new Label(Strings.DecompositionHint);

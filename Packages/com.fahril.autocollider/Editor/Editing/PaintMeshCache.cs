@@ -15,7 +15,7 @@ namespace AutoCollider.Editor
             foreach (var group in groups)
             {
                 if (group == null) continue;
-                foreach (var renderer in MeshSource.CollectRenderers(group.gameObject, group.Recipe.Settings, null))
+                foreach (var renderer in MeshSource.CollectRenderers(group.gameObject, group.Recipe.Settings, null, includeSprites: true))
                 {
                     var mesh = Get(renderer, group);
                     if (mesh != null) result.Add(mesh);
