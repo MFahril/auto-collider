@@ -75,9 +75,12 @@ namespace AutoCollider.Editor
                 }
                 case PolygonCollider2D polygon:
                     polygon.offset = Vector2.zero;
-                    polygon.pathCount = shape.Paths.Length;
-                    for (var p = 0; p < shape.Paths.Length; p++) polygon.SetPath(p, ToLocal(shape.Paths[p], t, space, z, false));
+                {
+                    var paths = new Vector2[shape.Paths.Length][];
+                    for (var p = 0; p < paths.Length; p++) paths[p] = ToLocal(shape.Paths[p], t, space, z, false);
+                    ColliderWriter2D.SetPaths(polygon, paths);
                     return true;
+                }
                 case EdgeCollider2D edge:
                     edge.offset = Vector2.zero;
                     edge.points = ToLocal(shape.Paths[0], t, space, z, true);
@@ -107,7 +110,11 @@ namespace AutoCollider.Editor
         private static Collider2D Replace(Collider2D old, FittedShape2D shape, ColliderGroup group, ColliderEntry entry, in TargetSpace space)
         {
             shape.Label = entry.Label;
-            var created = ColliderWriter2D.Create(shape, Writer().EnsureContainer2D(group), space);
+            // A bone collider stays on its bone (its dedicated object's parent is neither the group nor a container).
+            var parent = old.transform.parent;
+            if (ColliderShapes2D.IsDedicatedChild(old, group) && parent != null && parent != group.transform && parent != group.Container2D)
+                shape = ColliderShapes2D.ToLocalOf(shape, parent, space, ColliderShapes2D.PlaneZ(old, space));
+            var created = ColliderWriter2D.Create(shape, shape.Parent != null ? null : Writer().EnsureContainer2D(group), space);
             if (created == null) return old;
             created.enabled = old.enabled;
             created.isTrigger = old.isTrigger;

@@ -3,7 +3,18 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
-## [1.2.0] - 2026-10-13
+## [1.3.0] - 2026-10-13
+
+### Added
+- **2D collision events** (M10) on `ColliderGroup`: `CollisionEnter2D / Stay2D / Exit2D (entry, Collision2D)` and `TriggerEnter2D / Stay2D / Exit2D (entry, Collider2D)`, with or without a Rigidbody2D. The part comes from `Collision2D.otherCollider` (collisions) or `Collider2D.IsTouching` (triggers), and each contact is reported once. Relays (`ColliderRelay2D`, `ColliderStayRelay2D`) are added at runtime on the first subscription; Stay relays only when a Stay event is used.
+- **Skinned sprites**: with Unity's 2D Animation package installed, a sprite deformed by a Sprite Skin gets one 2D collider per bone (Strategy 2D *Per Bone*, and *Auto*), fitted in bone space and parented to the bones so it follows the animation. Uses the Per Bone settings (shape, weight threshold, symmetric left / right). The package stays optional (read by reflection).
+- **Sprite Collider Switcher**: one Polygon Collider 2D whose paths follow the sprite for frame-by-frame animation. Bake the outlines of every sprite in the object's Animator clips (plus extra sprites) in its inspector, or with *GameObject ▸ Auto Collider ▸ Add Sprite Collider Switcher*; at runtime it swaps the paths (flip X / Y included) only when the sprite changes, without allocating.
+- **Collider Doctor, 2D checks**: Polygon Collider 2D with too many points (*Simplify*), Tilemap Collider 2D without a composite (*Set Up Composite*), 2D colliders under a 3D Rigidbody and 3D colliders under a Rigidbody2D, 2D colliders tilted around X / Y, duplicate 2D colliders (*Remove Duplicate*), circles under non-uniform scale, and sprites without any collider (*Generate*).
+- **Demo 2D sample**: sprites, a flat gear mesh and a tilemap to generate, a running character with sprite-swap colliders, deliberate 2D mistakes for the Doctor and 2D hit reports in Play mode.
+
+### Changed
+- Converting a bone's 2D collider to another kind keeps it on its bone.
+- Large outlines (big tilemaps) are much faster: the self-intersection check uses a grid instead of testing every pair of edges, and polygon colliders get all their paths before Unity decomposes them once (a baked tilemap with 111 paths: 2.3 s → 38 ms). A 200 × 200 tilemap level bakes in milliseconds.
 
 ### Added
 - **2D editing** (M9): the Scene-view collider tool now edits 2D colliders — picking (edge colliders are hollow), 2D box / circle / capsule resize handles, move in the plane, rotate around Z, and polygon / edge point editing (drag points, click **+** on an edge to insert, Ctrl+click to delete, **Simplify** with a tolerance in the overlay). Hold **V** to snap to the sprite outline.

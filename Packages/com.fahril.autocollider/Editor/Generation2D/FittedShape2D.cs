@@ -1,4 +1,5 @@
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace AutoCollider.Editor
 {
@@ -49,6 +50,12 @@ namespace AutoCollider.Editor
 
         /// <summary>LOD level the shape was fitted for, or -1.</summary>
         public int Lod = -1;
+
+        /// <summary>
+        /// Bone colliders: the transform the collider is parented to. The shape is then in that transform's local space
+        /// (local units, not the target's 2D space).
+        /// </summary>
+        public Transform Parent;
 
         public bool IsRotated => (Kind == ShapeKind2D.Box || Kind == ShapeKind2D.Capsule) && math.abs(Angle) > 0.01f;
 

@@ -21,11 +21,14 @@ namespace AutoCollider
 
         private Dictionary<Component, ColliderEntry> _lookup;
         private TriggerPairs _triggerPairs;
+        private TriggerPairs2D _triggerPairs2D;
         private bool _routing;
         private bool _stayRouting;
 
         private Action<ColliderEntry, Collision> _collisionEnter, _collisionStay, _collisionExit;
         private Action<ColliderEntry, Collider> _triggerEnter, _triggerStay, _triggerExit;
+        private Action<ColliderEntry, Collision2D> _collisionEnter2D, _collisionStay2D, _collisionExit2D;
+        private Action<ColliderEntry, Collider2D> _triggerEnter2D, _triggerStay2D, _triggerExit2D;
 
         /// <summary>All tracked colliders (generated and manually registered).</summary>
         public IReadOnlyList<ColliderEntry> Entries => _entries;
@@ -136,6 +139,54 @@ namespace AutoCollider
         }
 
         /// <summary>
+        /// One of the group's 2D colliders started touching another 2D collider. Reports the entry that was hit
+        /// (exact, from <see cref="Collision2D.otherCollider"/>); works with or without a Rigidbody2D.
+        /// </summary>
+        public event Action<ColliderEntry, Collision2D> CollisionEnter2D
+        {
+            add { _collisionEnter2D += value; EnsureRouting(false); }
+            remove => _collisionEnter2D -= value;
+        }
+
+        /// <summary>Called every physics step while one of the group's 2D colliders keeps touching another 2D collider.</summary>
+        public event Action<ColliderEntry, Collision2D> CollisionStay2D
+        {
+            add { _collisionStay2D += value; EnsureRouting(true); }
+            remove => _collisionStay2D -= value;
+        }
+
+        /// <summary>One of the group's 2D colliders stopped touching another 2D collider.</summary>
+        public event Action<ColliderEntry, Collision2D> CollisionExit2D
+        {
+            add { _collisionExit2D += value; EnsureRouting(false); }
+            remove => _collisionExit2D -= value;
+        }
+
+        /// <summary>
+        /// A 2D collider entered one of the group's 2D triggers (or one of the group's 2D colliders entered a trigger).
+        /// The second argument is the other collider; the group's part is resolved with <see cref="Collider2D.IsTouching(Collider2D)"/>.
+        /// </summary>
+        public event Action<ColliderEntry, Collider2D> TriggerEnter2D
+        {
+            add { _triggerEnter2D += value; EnsureRouting(false); }
+            remove => _triggerEnter2D -= value;
+        }
+
+        /// <summary>Called every physics step while a 2D trigger overlap involving one of the group's colliders lasts.</summary>
+        public event Action<ColliderEntry, Collider2D> TriggerStay2D
+        {
+            add { _triggerStay2D += value; EnsureRouting(true); }
+            remove => _triggerStay2D -= value;
+        }
+
+        /// <summary>A 2D trigger overlap involving one of the group's colliders ended.</summary>
+        public event Action<ColliderEntry, Collider2D> TriggerExit2D
+        {
+            add { _triggerExit2D += value; EnsureRouting(false); }
+            remove => _triggerExit2D -= value;
+        }
+
+        /// <summary>
         /// Add relays to the objects that receive physics messages for the tracked colliders (play mode only).
         /// Called automatically when an event gets its first subscriber; call it again after adding colliders at runtime.
         /// </summary>
@@ -145,10 +196,20 @@ namespace AutoCollider
             foreach (var entry in _entries)
             {
                 var c = entry.Collider;
-                if (c == null) continue;
-                AddRelay(c.gameObject);
-                var body = c.attachedRigidbody;
-                if (body != null) AddRelay(body.gameObject);
+                if (c != null)
+                {
+                    AddRelay(c.gameObject);
+                    var body = c.attachedRigidbody;
+                    if (body != null) AddRelay(body.gameObject);
+                }
+
+                var c2 = entry.Collider2D;
+                if (c2 != null)
+                {
+                    AddRelay2D(c2.gameObject);
+                    var body2 = c2.attachedRigidbody;
+                    if (body2 != null) AddRelay2D(body2.gameObject);
+                }
             }
         }
 
@@ -165,6 +226,13 @@ namespace AutoCollider
             if (!host.TryGetComponent<ColliderRelay>(out var relay)) relay = host.AddComponent<ColliderRelay>();
             relay.Register(this);
             if (_stayRouting && !host.TryGetComponent<ColliderStayRelay>(out _)) host.AddComponent<ColliderStayRelay>();
+        }
+
+        private void AddRelay2D(GameObject host)
+        {
+            if (!host.TryGetComponent<ColliderRelay2D>(out var relay)) relay = host.AddComponent<ColliderRelay2D>();
+            relay.Register(this);
+            if (_stayRouting && !host.TryGetComponent<ColliderStayRelay2D>(out _)) host.AddComponent<ColliderStayRelay2D>();
         }
 
         internal void OnRelayCollision(GameObject receiver, Collision collision, RelayPhase phase)
@@ -203,6 +271,46 @@ namespace AutoCollider
                 RelayPhase.Enter => _triggerEnter,
                 RelayPhase.Stay => _triggerStay,
                 _ => _triggerExit,
+            };
+            handler?.Invoke(entry, other);
+        }
+
+        internal void OnRelayCollision2D(GameObject receiver, Collision2D collision, RelayPhase phase)
+        {
+            // In 2D, otherCollider is the receiving side's collider — ours.
+            var mine = collision.otherCollider;
+            if (mine == null || !TryGetEntry(mine, out var entry)) return;
+
+            // Same canonical receiver as 3D: the Rigidbody2D's object, else the collider's own object.
+            var body = mine.attachedRigidbody;
+            if (receiver != (body != null ? body.gameObject : mine.gameObject)) return;
+
+            var handler = phase switch
+            {
+                RelayPhase.Enter => _collisionEnter2D,
+                RelayPhase.Stay => _collisionStay2D,
+                _ => _collisionExit2D,
+            };
+            handler?.Invoke(entry, collision);
+        }
+
+        internal void OnRelayTrigger2D(GameObject receiver, Collider2D other, RelayPhase phase)
+        {
+            if (other == null) return;
+            _triggerPairs2D ??= new TriggerPairs2D();
+            var entry = phase switch
+            {
+                RelayPhase.Enter => _triggerPairs2D.Enter(this, receiver, other),
+                RelayPhase.Stay => _triggerPairs2D.Stay(receiver, other),
+                _ => _triggerPairs2D.Exit(receiver, other),
+            };
+            if (entry == null) return;
+
+            var handler = phase switch
+            {
+                RelayPhase.Enter => _triggerEnter2D,
+                RelayPhase.Stay => _triggerStay2D,
+                _ => _triggerExit2D,
             };
             handler?.Invoke(entry, other);
         }

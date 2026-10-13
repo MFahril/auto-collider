@@ -3,6 +3,7 @@ using System.Globalization;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Tilemaps;
 
 namespace AutoCollider.Editor
 {
@@ -39,6 +40,7 @@ namespace AutoCollider.Editor
             foreach (var go in objects)
             {
                 foreach (var collider in go.GetComponents<Collider>()) CheckCollider(collider, options, issues);
+                foreach (var collider in go.GetComponents<Collider2D>()) CheckCollider2D(collider, issues);
                 CheckDuplicates(go, issues);
                 if (go.TryGetComponent<ColliderGroup>(out var group)) CheckGroup(group, issues);
                 if (go.TryGetComponent<AnimatedMeshCollider>(out var animated)) CheckAnimated(animated, issues);
@@ -108,6 +110,57 @@ namespace AutoCollider.Editor
                     CheckScaledPrimitive(collider, issues);
                     break;
             }
+
+            if (collider.attachedRigidbody == null && collider.GetComponentInParent<Rigidbody>() == null
+                && collider.GetComponentInParent<Rigidbody2D>() != null)
+                issues.Add(new DoctorIssue(DoctorCheck.MixedPhysics, DoctorSeverity.Warning, collider, Strings.Doctor3DUnder2DBody));
+        }
+
+        // ---------- 2D checks ----------
+
+        /// <summary>Polygon Collider 2D point count from which the Doctor suggests simplifying.</summary>
+        internal const int PolygonPointBudget = 150;
+
+        private static void CheckCollider2D(Collider2D collider, List<DoctorIssue> issues)
+        {
+            switch (collider)
+            {
+                case PolygonCollider2D polygon when polygon.GetTotalPointCount() > PolygonPointBudget:
+                    issues.Add(new DoctorIssue(DoctorCheck.ComplexPolygon2D, DoctorSeverity.Warning, polygon,
+                            string.Format(CultureInfo.CurrentCulture, Strings.DoctorComplexPolygon, polygon.GetTotalPointCount(), PolygonPointBudget))
+                        .WithFix(Strings.DoctorFixSimplify, Strings.DoctorFixSimplifyTooltip, () => SimplifyPolygon(polygon)));
+                    break;
+                case TilemapCollider2D tiles when tiles.compositeOperation == Collider2D.CompositeOperation.None:
+                    issues.Add(new DoctorIssue(DoctorCheck.TilemapWithoutComposite, DoctorSeverity.Info, tiles, Strings.DoctorTilemapNoComposite)
+                        .WithFix(Strings.DoctorFixComposite, Strings.DoctorFixCompositeTooltip, () => SetUpComposite(tiles)));
+                    break;
+                case CircleCollider2D circle:
+                    CheckScaledCircle(circle, issues);
+                    break;
+            }
+
+            if (collider.attachedRigidbody == null && collider.GetComponentInParent<Rigidbody>() != null)
+                issues.Add(new DoctorIssue(DoctorCheck.MixedPhysics, DoctorSeverity.Warning, collider, Strings.Doctor2DUnder3DBody));
+
+            // 2D physics works in the XY plane: a tilt around X / Y is ignored (the shape is projected as if unrotated).
+            if (Mathf.Abs(Vector3.Dot(collider.transform.forward, Vector3.forward)) < TiltTolerance)
+                issues.Add(new DoctorIssue(DoctorCheck.Tilted2D, DoctorSeverity.Info, collider, Strings.DoctorTilted2D));
+        }
+
+        /// <summary>cos(≈0.8°): tilts smaller than this are noise.</summary>
+        private const float TiltTolerance = 0.9999f;
+
+        private static void CheckScaledCircle(CircleCollider2D circle, List<DoctorIssue> issues)
+        {
+            var group = circle.GetComponentInParent<ColliderGroup>(true);
+            if (group != null && group.TryGetEntry(circle, out var entry) && entry.Generated) return;
+
+            var s = circle.transform.lossyScale;
+            var largest = Mathf.Max(Mathf.Abs(s.x), Mathf.Abs(s.y));
+            var smallest = Mathf.Min(Mathf.Abs(s.x), Mathf.Abs(s.y));
+            if (smallest <= 0f || largest / smallest < ScaledPrimitiveRatio) return;
+            issues.Add(new DoctorIssue(DoctorCheck.ScaledPrimitive, DoctorSeverity.Info, circle,
+                string.Format(CultureInfo.CurrentCulture, Strings.DoctorScaledPrimitive, largest / smallest)));
         }
 
         private static void CheckMeshCollider(MeshCollider collider, Options options, List<DoctorIssue> issues)
@@ -181,12 +234,13 @@ namespace AutoCollider.Editor
 
         private static void CheckDuplicates(GameObject go, List<DoctorIssue> issues)
         {
-            var colliders = go.GetComponents<Collider>();
-            if (colliders.Length < 2) return;
+            var colliders = new List<Component>(go.GetComponents<Collider>());
+            colliders.AddRange(go.GetComponents<Collider2D>());
+            if (colliders.Count < 2) return;
             var seen = new HashSet<string>();
             foreach (var collider in colliders)
             {
-                var signature = Signature(collider);
+                var signature = collider is Collider c3 ? Signature(c3) : Signature2D((Collider2D)collider);
                 if (signature == null || seen.Add(signature)) continue;
                 issues.Add(new DoctorIssue(DoctorCheck.DuplicateCollider, DoctorSeverity.Warning, collider, Strings.DoctorDuplicate)
                     .WithFix(Strings.DoctorFixRemoveDuplicate, Strings.DoctorFixRemoveDuplicateTooltip, () => RemoveCollider(collider)));
@@ -231,12 +285,13 @@ namespace AutoCollider.Editor
         private static void CheckMissingCollider(GameObject go, List<DoctorIssue> issues)
         {
             if (!go.activeInHierarchy || !go.TryGetComponent<Renderer>(out var renderer) || !renderer.enabled) return;
-            if (!(renderer is MeshRenderer || renderer is SkinnedMeshRenderer) || MeshSource.SharedMesh(renderer) == null) return;
+            var isSprite = SpriteSource.IsSprite(renderer);
+            if (!isSprite && (!(renderer is MeshRenderer || renderer is SkinnedMeshRenderer) || MeshSource.SharedMesh(renderer) == null)) return;
             for (var t = go.transform; t != null; t = t.parent)
-                if (t.TryGetComponent<Collider>(out _) || t.TryGetComponent<ColliderGroup>(out _)) return;
-            if (go.GetComponentInChildren<Collider>(true) != null) return;
+                if (t.TryGetComponent<Collider>(out _) || t.TryGetComponent<Collider2D>(out _) || t.TryGetComponent<ColliderGroup>(out _)) return;
+            if (go.GetComponentInChildren<Collider>(true) != null || go.GetComponentInChildren<Collider2D>(true) != null) return;
 
-            issues.Add(new DoctorIssue(DoctorCheck.NoCollider, DoctorSeverity.Info, go, Strings.DoctorNoCollider)
+            issues.Add(new DoctorIssue(DoctorCheck.NoCollider, DoctorSeverity.Info, go, isSprite ? Strings.DoctorNoCollider2D : Strings.DoctorNoCollider)
                 .WithFix(Strings.DoctorFixGenerate, Strings.DoctorFixGenerateTooltip,
                     () => BatchProcessor.Generate(new[] { go }, GenerationSettingsState.instance.Settings, MeshFolderOverride, showProgress: false)));
         }
@@ -264,15 +319,71 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>Destroy a collider (explicitly requested by the user), unregistering it from its group first.</summary>
-        private static void RemoveCollider(Collider collider)
+        private static void RemoveCollider(Component collider)
         {
             var group = collider.GetComponentInParent<ColliderGroup>(true);
-            if (group != null && group.TryGetEntry(collider, out var entry))
+            var entry = group == null ? null : collider switch
+            {
+                Collider c => Entry(group, c),
+                Collider2D c2 => Entry(group, c2),
+                _ => null,
+            };
+            if (entry != null)
             {
                 ColliderWriter.RecordGroup(group, Strings.UndoDoctorFix);
                 group.RemoveEntry(entry);
             }
             Undo.DestroyObjectImmediate(collider);
+        }
+
+        private static ColliderEntry Entry(ColliderGroup group, Collider c) => group.TryGetEntry(c, out var e) ? e : null;
+        private static ColliderEntry Entry(ColliderGroup group, Collider2D c) => group.TryGetEntry(c, out var e) ? e : null;
+
+        /// <summary>Douglas–Peucker every path (in the collider's local space) at 0.5% of its size.</summary>
+        private static void SimplifyPolygon(PolygonCollider2D polygon)
+        {
+            var loops = new List<Unity.Mathematics.float2[]>(polygon.pathCount);
+            for (var p = 0; p < polygon.pathCount; p++)
+            {
+                var path = polygon.GetPath(p);
+                var loop = new Unity.Mathematics.float2[path.Length];
+                for (var i = 0; i < path.Length; i++) loop[i] = path[i];
+                loops.Add(loop);
+            }
+            Polygon2D.Bounds(loops, out var min, out var max);
+            var simplified = PolygonSimplifier.Simplify(loops, Unity.Mathematics.math.distance(min, max) * SimplifyFraction);
+            if (simplified.Count == 0) return;
+
+            var paths = new Vector2[simplified.Count][];
+            for (var p = 0; p < paths.Length; p++)
+            {
+                paths[p] = new Vector2[simplified[p].Length];
+                for (var i = 0; i < paths[p].Length; i++) paths[p][i] = simplified[p][i];
+            }
+            Undo.RecordObject(polygon, Strings.UndoDoctorFix);
+            ColliderWriter2D.SetPaths(polygon, paths);
+            RecordPrefab(polygon);
+        }
+
+        private const float SimplifyFraction = 0.005f;
+
+        /// <summary>Merge a tilemap's tiles into one composite (the user asked for it on their own tilemap collider).</summary>
+        private static void SetUpComposite(TilemapCollider2D tiles)
+        {
+            var go = tiles.gameObject;
+            if (!go.TryGetComponent<Rigidbody2D>(out _))
+            {
+                var body = Undo.AddComponent<Rigidbody2D>(go);
+                body.bodyType = RigidbodyType2D.Static;
+            }
+            if (!go.TryGetComponent<CompositeCollider2D>(out var composite))
+            {
+                composite = Undo.AddComponent<CompositeCollider2D>(go);
+                composite.geometryType = CompositeCollider2D.GeometryType.Polygons;
+            }
+            Undo.RecordObject(tiles, Strings.UndoDoctorFix);
+            tiles.compositeOperation = Collider2D.CompositeOperation.Merge;
+            RecordPrefab(tiles);
         }
 
         private static void RecordPrefab(Object o)
@@ -333,6 +444,39 @@ namespace AutoCollider.Editor
                 MeshCollider m => m.sharedMesh == null ? null : $"Mesh|{common}{m.sharedMesh.GetEntityId()}|{m.convex}",
                 _ => null,
             };
+        }
+
+        private static string Signature2D(Collider2D c)
+        {
+            static string V(Vector2 v) => string.Format(CultureInfo.InvariantCulture, "{0:R},{1:R}", v.x, v.y);
+            var common = $"{c.isTrigger}|{c.enabled}|{V(c.offset)}|";
+            switch (c)
+            {
+                case BoxCollider2D b:
+                    return $"Box2D|{common}{V(b.size)}|{b.edgeRadius:R}";
+                case CircleCollider2D s:
+                    return $"Circle2D|{common}{s.radius:R}";
+                case CapsuleCollider2D k:
+                    return $"Capsule2D|{common}{V(k.size)}|{k.direction}";
+                case PolygonCollider2D p:
+                {
+                    var sb = new System.Text.StringBuilder($"Polygon2D|{common}");
+                    for (var i = 0; i < p.pathCount; i++)
+                    {
+                        sb.Append('[');
+                        foreach (var point in p.GetPath(i)) sb.Append(V(point)).Append(';');
+                    }
+                    return sb.ToString();
+                }
+                case EdgeCollider2D e:
+                {
+                    var sb = new System.Text.StringBuilder($"Edge2D|{common}");
+                    foreach (var point in e.points) sb.Append(V(point)).Append(';');
+                    return sb.ToString();
+                }
+                default:
+                    return null;
+            }
         }
     }
 }

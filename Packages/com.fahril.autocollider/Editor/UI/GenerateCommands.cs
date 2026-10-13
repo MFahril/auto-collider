@@ -51,6 +51,17 @@ namespace AutoCollider.Editor
         [MenuItem(GameObjectMenu + Strings.AddAnimatedCollider, true)]
         private static bool ValidateAnimatedMenu() => HasSceneSelection();
 
+        [MenuItem(GameObjectMenu + Strings.AddSpriteSwitcher, false, 61)]
+        private static void SpriteSwitcherMenu(MenuCommand command)
+        {
+            if (IsRepeatedContextInvocation(command)) return;
+            var added = SpriteColliderBaker.AddTo(Selection.gameObjects, GenerationSettingsState.instance.Settings);
+            Notify(added > 0 ? string.Format(Strings.NotifySwitcherAdded, added) : Strings.NotifyNoSprites);
+        }
+
+        [MenuItem(GameObjectMenu + Strings.AddSpriteSwitcher, true)]
+        private static bool ValidateSpriteSwitcherMenu() => HasSceneSelection();
+
         /// <summary>
         /// Add a Mesh Collider + <see cref="AnimatedMeshCollider"/> to every object with a Skinned Mesh Renderer (one Undo step).
         /// The collider is convex under a moving Rigidbody (PhysX rejects concave ones there).

@@ -1,8 +1,8 @@
 {
   "name": "com.fahril.autocollider",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "displayName": "Auto Collider",
-  "description": "Generate, optimize and edit colliders for one or many objects: fitted primitives, convex hulls, convex decomposition, simplified mesh colliders, painted and per-bone colliders, in-scene collider editing, a Collider Doctor, and a Collider Group component that handles all of an object's colliders (and their collision events) as one.",
+  "description": "Generate, optimize and edit colliders for one or many objects: fitted primitives, convex hulls, convex decomposition, simplified mesh colliders, painted and per-bone colliders, 2D colliders for sprites, flat meshes, tilemaps and skinned sprites, sprite-swap colliders, in-scene collider editing, a Collider Doctor, and a Collider Group component that handles all of an object's colliders (and their collision events) as one.",
   "unity": "6000.6",
   "author": {
     "name": "M. Fahril Ilmi"
@@ -14,6 +14,9 @@
     "mesh collider",
     "convex decomposition",
     "optimization",
+    "2d",
+    "sprite",
+    "tilemap",
     "editor tool"
   ],
   "dependencies": {
@@ -28,6 +31,11 @@
       "displayName": "Demo",
       "description": "Demo scene with props to generate, a skinned arm, a LOD object, deliberate collider mistakes for the Doctor, and collision events in Play mode (materials use URP).",
       "path": "Samples~/Demo"
+    },
+    {
+      "displayName": "Demo 2D",
+      "description": "2D demo: sprites, a flat mesh and a tilemap to generate, a running character with sprite-swap colliders, deliberate 2D mistakes for the Doctor, and 2D collision events in Play mode.",
+      "path": "Samples~/Demo 2D"
     }
   ]
 }

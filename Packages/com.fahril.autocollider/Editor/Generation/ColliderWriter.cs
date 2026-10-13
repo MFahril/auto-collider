@@ -71,7 +71,7 @@ namespace AutoCollider.Editor
             {
                 var shape = result.Shapes2D[i];
                 if (shape.RegionId >= 0 && lockedRegions.Contains(shape.RegionId)) continue;
-                var collider2D = ColliderWriter2D.Create(shape, EnsureContainer2D(group), space);
+                var collider2D = ColliderWriter2D.Create(shape, shape.Parent != null ? null : EnsureContainer2D(group), space);
                 if (collider2D == null) continue;
 
                 collider2D.isTrigger = settings.IsTrigger;
@@ -137,7 +137,7 @@ namespace AutoCollider.Editor
         /// <summary>2D: create one collider for <paramref name="shape"/> on the 2D container and register it (edit tool, painted regions).</summary>
         public ColliderEntry AddShape2D(ColliderGroup group, FittedShape2D shape, in TargetSpace space, Collider2D template = null, int partId = -1)
         {
-            var collider = ColliderWriter2D.Create(shape, EnsureContainer2D(group), space);
+            var collider = ColliderWriter2D.Create(shape, shape.Parent != null ? null : EnsureContainer2D(group), space);
             if (collider == null) return null;
 
             if (template != null)

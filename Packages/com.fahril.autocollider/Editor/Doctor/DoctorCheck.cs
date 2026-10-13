@@ -33,7 +33,19 @@ namespace AutoCollider.Editor
         /// <summary>Animated Mesh Collider without source / target, or Shared Mesh mode on a mesh without Read/Write.</summary>
         AnimatedSetup,
 
-        /// <summary>Visible mesh without any collider (optional check).</summary>
+        /// <summary>Visible mesh or sprite without any collider (optional check).</summary>
         NoCollider,
+
+        /// <summary>Polygon Collider 2D with more points than the budget.</summary>
+        ComplexPolygon2D,
+
+        /// <summary>Tilemap Collider 2D whose tiles are separate shapes (no composite).</summary>
+        TilemapWithoutComposite,
+
+        /// <summary>2D collider under a 3D Rigidbody, or 3D collider under a Rigidbody2D: two physics worlds that never meet.</summary>
+        MixedPhysics,
+
+        /// <summary>2D collider on an object rotated around X / Y (2D physics ignores that rotation).</summary>
+        Tilted2D,
     }
 }

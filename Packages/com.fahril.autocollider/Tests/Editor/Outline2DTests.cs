@@ -1,4 +1,5 @@
-﻿using System.Linq;
+using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using Unity.Mathematics;
 
@@ -146,6 +147,40 @@ namespace AutoCollider.Editor.Tests
             Assert.That(Polygon2D.Area(loops), Is.EqualTo(12f).Within(1e-5f));
             Assert.That(Polygon2D.Contains(loops, new float2(0.5f, 0.5f)), Is.True);
             Assert.That(Polygon2D.Contains(loops, new float2(2, 2)), Is.False);
+        }
+
+        [Test]
+        public void IsSimple_LongLoops_MatchThePairwiseAnswer_AndStayFast()
+        {
+            // A 4,000-step staircase (simple) and the same loop with two points swapped (crossing).
+            var stairs = new List<float2>();
+            for (var i = 0; i < 1000; i++)
+            {
+                stairs.Add(new float2(i, i));
+                stairs.Add(new float2(i + 1, i));
+            }
+            stairs.Add(new float2(1000, 1000));
+            stairs.Add(new float2(0, 1000));
+            var crossed = new List<float2>(stairs);
+            (crossed[500], crossed[1500]) = (crossed[1500], crossed[500]);
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.That(Polygon2D.IsSimple(stairs), Is.True);
+            Assert.That(Polygon2D.IsSimple(crossed), Is.False);
+            Assert.That(watch.ElapsedMilliseconds, Is.LessThan(500));
+
+            // Random small polygons: the grid path (forced by size) agrees with brute force on a densified copy.
+            var random = new Unity.Mathematics.Random(3);
+            for (var trial = 0; trial < 50; trial++)
+            {
+                var loop = new List<float2>();
+                for (var i = 0; i < 12; i++) loop.Add(random.NextFloat2() * 10f);
+                var dense = new List<float2>();
+                for (var i = 0; i < loop.Count; i++)
+                for (var k = 0; k < 10; k++)
+                    dense.Add(math.lerp(loop[i], loop[(i + 1) % loop.Count], k / 10f));
+                Assert.That(Polygon2D.IsSimple(dense), Is.EqualTo(Polygon2D.IsSimple(loop)), $"trial {trial}");
+            }
         }
     }
 }

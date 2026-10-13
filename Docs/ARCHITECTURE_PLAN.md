@@ -1,6 +1,6 @@
 # Auto Collider — Analysis, Architecture & Plan
 
-> Status: **M0–M9 done — 1.2.0** (2D generation, editing, painting, tilemaps); 2D runtime planned as M10 (see §5.7, §8) — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
+> Status: **M0–M10 done — 1.3.0** (3D + full 2D: generation, editing, painting, tilemaps, skinned sprites, sprite swaps, events, Doctor) — progress is tracked in [`ROADMAP.md`](ROADMAP.md).
 > Rules for contributors / Claude Code: see [`CLAUDE.md`](../CLAUDE.md).
 
 ---
@@ -130,29 +130,33 @@ Pipeline (from their docs):
 
 ```
 Packages/com.fahril.autocollider/
-├─ package.json                  deps: com.unity.burst 2.0.0, com.unity.collections 6.6.0, com.unity.modules.physics (Mathematics is an engine module in 6000.6)
+├─ package.json                  deps: com.unity.burst 2.0.0, com.unity.collections 6.6.0, com.unity.modules.physics / physics2d / tilemap (Mathematics is an engine module in 6000.6)
 ├─ Runtime/   (AutoCollider.Runtime.asmdef)
 │  ├─ ColliderGroup.cs
 │  ├─ ColliderEntry.cs
 │  ├─ GenerationSettings.cs      serializable settings (+ ColliderStrategy, MeshGranularity, ReplaceMode enums)
 │  ├─ GenerationRecipe.cs        settings + painted regions (for regenerate)
 │  ├─ PhysicsLimits.cs
-│  ├─ ColliderRelay.cs
+│  ├─ ColliderRelay.cs, ColliderRelay2D.cs (+ Stay relays, TriggerPairs / TriggerPairs2D)
+│  ├─ SpriteColliderSwitcher.cs  per-sprite polygon paths swapped when the sprite changes
 │  ├─ AnimatedMeshCollider.cs
 │  └─ ColliderLodFollower.cs
 ├─ Editor/    (AutoCollider.Editor.asmdef → Runtime, Burst, Collections)
 │  ├─ Core/          MeshSource, MeshGeometry, TargetSpace, Fitting/*, QuickHull3D, ConvexHull, GeometryUtils
+│  ├─ Core2D/        SpriteSource, OutlineTracer, PolygonSimplifier, Polygon2D, Outline2D, 2D fitters
 │  ├─ Optimization/  ClusterSimplifier, MeshCleaner, InflateDeflate, ConvexDecomposer,
 │  │                 PrimitiveReplacer, ErrorMetric, ColliderStats
 │  ├─ Generation/    GenerationSettingsState, ColliderPreset, Strategies/*, GenerationPipeline,
 │  │                 TargetResult, TargetResolver, BatchProcessor, ColliderWriter, GeneratedMeshStore
+│  ├─ Generation2D/  FittedShape2D, Strategies2D, GenerationPipeline2D, ColliderWriter2D, RegionFitter2D,
+│  │                 TilemapSetup, BoneFitter2D, SpriteSkinAccess, SpriteColliderBaker
 │  ├─ Editing/       ColliderEditTool, ColliderOverlay, ShapeHandles, ColliderPicker,
 │  │                 PaintMode, SelectionOps (merge/mirror/convert/refit), Shortcuts
 │  ├─ UI/            AutoColliderWindow, GenerateTab, ColliderGroupEditor, GenerateCommands, ColliderCost,
 │  │                 StatsView, HeatmapDrawer, AutoColliderSettingsProvider, Strings, AutoColliderStyles, Uss/
 │  └─ Doctor/        ColliderDoctor, DoctorIssue, DoctorCheck, DoctorSeverity
 ├─ Tests/Editor/ (AutoCollider.Editor.Tests.asmdef)
-├─ Samples~/Demo/
+├─ Samples~/Demo/, Samples~/Demo 2D/
 └─ Documentation~/
 ```
 
@@ -376,7 +380,7 @@ public class ColliderGroup : MonoBehaviour {
 
 ### 5.7 2D (sprites, flat meshes, tilemaps, sprite skeletons)
 
-*M8 (generation) and M9 (editing, painting, tilemaps) implemented; M10 (2D events, skeletons, sprite swaps, Doctor) planned.*
+*Implemented in M8 (generation), M9 (editing, painting, tilemaps) and M10 (events, skeletons, sprite swaps, Doctor).*
 
 **One group for both kinds.** `ColliderEntry` holds a `Collider` **or** a `Collider2D` (generic `Component`, `IsAlive`, `Enabled`, `IsTrigger`, `Bounds`); the bulk API, lookup and inspector handle both. Unity refuses a `Collider2D` on a GameObject that has a 3D `Collider` (and vice versa), so 2D colliders live on their own container, `[Colliders 2D]` (`ColliderGroup.Container2D`); rotated 2D boxes / capsules get their own child rotated around Z.
 
@@ -396,6 +400,23 @@ public class ColliderGroup : MonoBehaviour {
 **Tilemaps (M9, `TilemapSetup`).** *Composite* (default): `TilemapCollider2D` (composite operation Merge) + `CompositeCollider2D` (polygons) + a static `Rigidbody2D` when the tilemap has none — that body is a non-collider component the tool created, tracked in `ColliderGroup.OwnedComponents` and destroyed once no composite needs it. A user's own `TilemapCollider2D` is never touched (warning). *Baked*: the tiles are rasterized directly — grid tiles fill their cells exactly; sprite tiles use their physics shape through the tile's transform at 4 sub-cells — then traced and simplified (tolerance ≤ 0.2 % of the size, so corners survive) into one owned polygon with holes, or edge loops. Only rectangular grids bake; others fall back to Composite.
 
 **Fitting** (`Strategies2D`): Box (AABB, or min-area rectangle when rotation is allowed and ≥ 3 % tighter), Circle (Welzl), Capsule (X / Y / principal axis; 4 % cap slack for pixel stair corners; near-circular capsules become circles), Convex Polygon (simplified hull), Polygon (simplified outline + holes), Edge (one closed `EdgeCollider2D` per loop). **Auto 2D:** best primitive (cheaper wins within 2 %) if it fills ≥ Primitive Fit Threshold of it → convex polygon if area ÷ hull area ≥ Convexity Threshold → simplified polygon (`PolygonCollider2D` decomposes it into convex pieces itself). Combined granularity unions the outlines on one raster. Inflate grows primitives analytically and offsets polygons (miter, clamped).
+
+**2D events (M10).** `ColliderGroup` has `CollisionEnter2D / Stay2D / Exit2D (entry, Collision2D)` and `TriggerEnter2D / Stay2D / Exit2D (entry, Collider2D)`, routed exactly like 3D: `RefreshRouting` adds `ColliderRelay2D` to each 2D collider's object and its `Rigidbody2D`'s object (`ColliderStayRelay2D` only when a Stay event has a subscriber). Collisions: `Collision2D.otherCollider` is the receiving side's collider (ours), and only the canonical receiver (the body's object, else the collider's) reports, so compound bodies report each contact once. Triggers: `TriggerPairs2D` takes the receiver's collider that `IsTouching(other)` and isn't paired yet (exact, unlike the 3D overlap heuristic), remembers the pair until Exit (the pair that no longer touches ended), and leaves messages that belong to a child collider to the child's relay.
+
+**Sprite skeletons (M10).** `GenerationPipeline2D.TryFitBones` runs for sprites with a 2D Animation `SpriteSkin` (Strategy 2D Auto / Per Bone). The bones come from `SpriteSkin.boneTransforms`, read by reflection (`SpriteSkinAccess`), so the package stays optional. Everything else comes from core `UnityEngine.U2D` sprite data: positions, `BoneWeight`s (`BlendWeight` channel), indices and bind poses. `BoneFitter2D` gives each triangle to the bone most of its vertices are weighted to (strongest bone per vertex, `BoneFitter.StrongestBones`), maps the vertices into that bone's space with its bind pose, rasterizes and traces the bone's triangles, and fits *Bone Shape* (Capsule by default). Shapes carry `FittedShape2D.Parent` = the bone: `ColliderWriter2D` puts them on a child of the bone in bone-local units, so they follow the animation. Symmetric bones share sizes. Converting such a collider keeps it on its bone (`ColliderShapes2D.ToLocalOf`).
+
+**Sprite-swap colliders (M10).** `SpriteColliderSwitcher` (runtime) stores one set of polygon paths per sprite in sprite units (unflipped). In `LateUpdate`, when the renderer's sprite or flip changes, it copies that sprite's paths into its `PolygonCollider2D` through a reused buffer: mirrored for flips, and transformed when the collider sits on another object. Unknown sprites keep the last shape. `SpriteColliderBaker` (editor) collects the sprites from the Animator controller's clips (`m_Sprite` object-reference curves on this object's path), the current sprite and an extra list. It traces each one with the 2D outline engine and `Strategies2D.Polygon`, then stores and applies the shapes in one Undo step.
+
+**Doctor 2D (M10).**
+- Polygon Collider 2D over 150 points → Douglas–Peucker at 0.5 % of its size.
+- Tilemap Collider 2D without composite → add a static `Rigidbody2D` (if missing) and a `CompositeCollider2D`, and set Merge. This runs only when the user asks; the generator never modifies a user's tilemap collider.
+- 2D / 3D physics mixed under one body.
+- 2D collider tilted around X / Y.
+- Duplicate 2D colliders (shape signature).
+- User circle under non-uniform scale.
+- Sprites without colliders.
+
+The planned "sprite without physics shape" info check was dropped. Outlines come from pixels, so a missing physics shape is no longer a problem; the useful check is a sprite with no collider at all.
 
 ---
 

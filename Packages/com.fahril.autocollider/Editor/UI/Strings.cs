@@ -157,6 +157,16 @@ namespace AutoCollider.Editor
         public const string DoctorDuplicate = "Identical collider on the same object — doubles the physics cost for nothing.";
         public const string DoctorMissingEntries = "{0} tracked collider(s) were deleted outside Auto Collider.";
         public const string DoctorNoCollider = "Visible mesh without any collider.";
+        public const string DoctorNoCollider2D = "Visible sprite without any collider.";
+        public const string DoctorComplexPolygon = "Polygon Collider 2D with {0:N0} points (budget {1:N0}) — every point costs in each contact test.";
+        public const string DoctorTilemapNoComposite = "Tilemap Collider 2D without a composite — every tile is its own shape (slow, and objects catch on the seams between tiles).";
+        public const string Doctor2DUnder3DBody = "2D collider under a 3D Rigidbody — 2D and 3D physics never meet, so the Rigidbody doesn't move it. Use a Rigidbody2D.";
+        public const string Doctor3DUnder2DBody = "3D collider under a Rigidbody2D — 2D and 3D physics never meet, so the Rigidbody2D doesn't move it. Use a 2D collider.";
+        public const string DoctorTilted2D = "2D collider on an object rotated around X / Y — 2D physics ignores that rotation, so the collider doesn't match what you see.";
+        public const string DoctorFixSimplify = "Simplify";
+        public const string DoctorFixSimplifyTooltip = "Remove points that lie within a small tolerance (0.5% of the collider's size) of a straight line.";
+        public const string DoctorFixComposite = "Set Up Composite";
+        public const string DoctorFixCompositeTooltip = "Merge the tiles: add a Composite Collider 2D (and a static Rigidbody2D if the tilemap has none) and set the tilemap collider's Composite Operation to Merge.";
 
         public const string DoctorFixConvex = "Make Convex";
         public const string DoctorFixConvexTooltip = "Set Convex on the Mesh Collider (works with moving Rigidbodies and triggers; loses concave detail — use Convex Decomposition for concave shapes).";
@@ -475,6 +485,23 @@ namespace AutoCollider.Editor
         public const string KindCapsule2D = "Capsule 2D";
         public const string KindPolygon2D = "Polygon 2D";
         public const string KindEdge2D = "Edge 2D";
+
+        // Sprite collider switcher (M10)
+        public const string AddSpriteSwitcher = "Add Sprite Collider Switcher";
+        public const string UndoAddSpriteSwitcher = "Auto Collider: Add Sprite Collider Switcher";
+        public const string UndoBakeSprites = "Auto Collider: Bake Sprite Colliders";
+        public const string UndoClearSprites = "Auto Collider: Clear Sprite Colliders";
+        public const string NotifySwitcherAdded = "Sprite Collider Switcher added to {0} object(s).";
+        public const string NotifyNoSprites = "Select objects with a Sprite Renderer.";
+        public const string SwitcherBake = "Bake Sprite Colliders";
+        public const string SwitcherBakeTooltip = "Trace every sprite this renderer shows (from the Animator's clips, the current sprite and Extra Sprites) with the current Generate settings and store one polygon per sprite.";
+        public const string SwitcherClear = "Clear {0} Shape(s)";
+        public const string SwitcherClearTooltip = "Forget every baked sprite shape (the collider keeps its current paths).";
+        public const string SwitcherSummary = "{0} sprite(s) baked · {1:N0} points in total.";
+        public const string SwitcherMissingCollider = "No Polygon Collider 2D assigned — baking adds one to this object.";
+        public const string SwitcherUnbaked = "{0} sprite(s) used by this renderer have no baked shape (the collider keeps its last shape while they show).";
+        public const string SwitcherHint = "At runtime the collider's paths are swapped whenever the sprite changes (flip X / Y included) — no tracing, no allocation.";
+        public const string NotifyBaked = "Baked {0} sprite shape(s)";
 
         // Collider kinds
         public const string KindBox = "Box";

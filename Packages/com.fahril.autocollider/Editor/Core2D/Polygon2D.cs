@@ -98,11 +98,20 @@ namespace AutoCollider.Editor
         private static double Cross(float2 o, float2 a, float2 b) =>
             ((double)a.x - o.x) * ((double)b.y - o.y) - ((double)a.y - o.y) * ((double)b.x - o.x);
 
+        /// <summary>Loops up to this many edges are checked pair by pair; longer ones through a uniform grid.</summary>
+        private const int BruteForceEdges = 96;
+
         /// <summary>No two non-adjacent edges of the loop cross.</summary>
         public static bool IsSimple(IReadOnlyList<float2> loop)
         {
             var n = loop.Count;
             if (n < 3) return false;
+            return n <= BruteForceEdges ? IsSimpleBrute(loop) : IsSimpleGrid(loop);
+        }
+
+        private static bool IsSimpleBrute(IReadOnlyList<float2> loop)
+        {
+            var n = loop.Count;
             for (var i = 0; i < n; i++)
             {
                 var a = loop[i];
@@ -111,6 +120,54 @@ namespace AutoCollider.Editor
                 {
                     if (i == 0 && j == n - 1) continue;
                     if (SegmentsCross(a, b, loop[j], loop[(j + 1) % n])) return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Same answer as the pairwise check in about O(n) for outlines: every edge is binned into the grid cells its bounding
+        /// box covers (≈ n cells over the loop's bounds), and only edges sharing a cell are tested.
+        /// </summary>
+        private static bool IsSimpleGrid(IReadOnlyList<float2> loop)
+        {
+            var n = loop.Count;
+            var min = new float2(float.MaxValue);
+            var max = new float2(float.MinValue);
+            for (var i = 0; i < n; i++)
+            {
+                min = math.min(min, loop[i]);
+                max = math.max(max, loop[i]);
+            }
+            var side = (int)math.ceil(math.sqrt(n));
+            var size = math.max(max - min, new float2(1e-6f));
+            var scale = side / size;
+
+            var cells = new Dictionary<int, List<int>>(n);
+            for (var i = 0; i < n; i++)
+            {
+                var a = loop[i];
+                var b = loop[(i + 1) % n];
+                var lo = math.clamp((int2)math.floor((math.min(a, b) - min) * scale), 0, side - 1);
+                var hi = math.clamp((int2)math.floor((math.max(a, b) - min) * scale), 0, side - 1);
+                for (var y = lo.y; y <= hi.y; y++)
+                for (var x = lo.x; x <= hi.x; x++)
+                {
+                    var key = y * side + x;
+                    if (!cells.TryGetValue(key, out var list)) cells[key] = list = new List<int>(4);
+                    list.Add(i);
+                }
+            }
+
+            foreach (var list in cells.Values)
+            {
+                for (var p = 0; p < list.Count; p++)
+                for (var q = p + 1; q < list.Count; q++)
+                {
+                    int i = list[p], j = list[q];
+                    var gap = math.abs(i - j);
+                    if (gap <= 1 || gap == n - 1) continue; // adjacent edges share an endpoint
+                    if (SegmentsCross(loop[i], loop[(i + 1) % n], loop[j], loop[(j + 1) % n])) return false;
                 }
             }
             return true;

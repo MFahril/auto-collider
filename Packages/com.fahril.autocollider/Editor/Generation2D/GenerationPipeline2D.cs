@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.U2D;
 
 namespace AutoCollider.Editor
 {
@@ -37,10 +38,13 @@ namespace AutoCollider.Editor
             if (settings.AllowRotation && !uniform) result.Warn(Strings.WarningNonUniformScale);
             var context = new FitContext(settings.AllowRotation && uniform);
 
+            // Skinned sprites get per-bone colliders (Per Bone, and Auto); everything else uses the outline strategy.
+            var perBone = settings.Strategy2D == ColliderStrategy2D.PerBone || settings.Strategy2D == ColliderStrategy2D.Auto;
             var outlines = new List<Outline2D>(renderers.Count);
             var warnings = new List<string>();
             foreach (var renderer in renderers)
             {
+                if (perBone && renderer is SpriteRenderer sprite && TryFitBones(sprite, settings, result)) continue;
                 try
                 {
                     var outline = SpriteSource.Read(renderer, space, settings, warnings);
@@ -71,6 +75,65 @@ namespace AutoCollider.Editor
                     result.Shapes2D.Add(shape);
                 }
             }
+        }
+
+        /// <summary>
+        /// Per-bone colliders for a sprite deformed by a 2D Animation SpriteSkin, parented to its bones. False when the sprite
+        /// has no skinning data or no SpriteSkin (the caller then fits its outline instead).
+        /// </summary>
+        internal static bool TryFitBones(SpriteRenderer renderer, GenerationSettings settings, TargetResult result)
+        {
+            var sprite = renderer.sprite;
+            var bones = SpriteSkinAccess.Bones(renderer);
+            if (sprite == null || bones == null || bones.Length == 0) return false;
+            if (!sprite.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.BlendWeight)) return false;
+
+            float2[] vertices;
+            int[] triangles;
+            BoneWeight[] weights;
+            float4x4[] bindposes;
+            try
+            {
+                var positions = sprite.GetVertexAttribute<Vector3>(UnityEngine.Rendering.VertexAttribute.Position);
+                var boneWeights = sprite.GetVertexAttribute<BoneWeight>(UnityEngine.Rendering.VertexAttribute.BlendWeight);
+                var indices = sprite.GetIndices();
+                var poses = sprite.GetBindPoses();
+
+                vertices = new float2[positions.Length];
+                for (var i = 0; i < vertices.Length; i++) vertices[i] = ((float3)positions[i]).xy;
+                weights = new BoneWeight[boneWeights.Length];
+                for (var i = 0; i < weights.Length; i++) weights[i] = boneWeights[i];
+                triangles = new int[indices.Length];
+                for (var i = 0; i < triangles.Length; i++) triangles[i] = indices[i];
+                bindposes = new float4x4[poses.Length];
+                for (var i = 0; i < bindposes.Length; i++) bindposes[i] = poses[i];
+            }
+            catch (Exception e)
+            {
+                result.Warn(string.Format(Strings.WarningMeshReadFailed, renderer.name, e.Message));
+                return false;
+            }
+            if (weights.Length != vertices.Length || bindposes.Length != bones.Length) return false;
+
+            var fits = BoneFitter2D.Fit(vertices, triangles, BoneFitter.StrongestBones(weights, settings.BoneWeightThreshold), bindposes,
+                settings.BoneShape, settings);
+            var named = new List<(string, FittedShape2D)>();
+            foreach (var fit in fits)
+            {
+                var bone = bones[fit.Bone];
+                if (bone == null) continue;
+                var shape = fit.Shape;
+                shape.Parent = bone;
+                shape.Label = bone.name;
+                Inflate(shape, settings.Inflate);
+                named.Add((bone.name, shape));
+                result.Shapes2D.Add(shape);
+            }
+            if (named.Count == 0) return false;
+
+            if (settings.SymmetricBones) BoneFitter2D.Symmetrize(named);
+            result.Notes.Add(string.Format(Strings.NoteBones, renderer.name, named.Count));
+            return true;
         }
 
         /// <summary>One outline covering all of them (even-odd raster union, traced back to loops).</summary>

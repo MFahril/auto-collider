@@ -38,6 +38,8 @@ Packages/com.fahril.autocollider/
     GenerationRecipe.cs, GenerationSettings.cs (+ strategy/granularity/replace/dimension/strategy2D/outline enums), PhysicsLimits.cs
     PaintedRegion.cs, PartShape.cs  painted parts stored in the recipe (ids ≥ 10000 = entry PartId)
     ColliderRelay.cs (+ ColliderStayRelay, TriggerPairs)  routes physics messages to the group (added at runtime on first event subscription)
+    ColliderRelay2D.cs (+ ColliderStayRelay2D, TriggerPairs2D)  same for 2D messages
+    SpriteColliderSwitcher.cs  per-sprite PolygonCollider2D paths, swapped when the sprite changes (frame-by-frame animation)
     AnimatedMeshCollider.cs (+ RefreshSchedule)  runtime skinned/blendshape collider refresh, throttled
     ColliderLodFollower.cs (+ LodMath)  enables the active LOD level's colliders
   Editor/                      AutoCollider.Editor
@@ -51,7 +53,8 @@ Packages/com.fahril.autocollider/
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store,
                                RegionFitter (painted region → shapes, shared by paint tool + pipeline), BoneFitter (per-bone)
     Generation2D/              FittedShape2D, Strategies2D (Auto 2D), GenerationPipeline2D (routing + fit), ColliderWriter2D,
-                               RegionFitter2D (painted 2D regions), TilemapSetup (Composite / Baked tilemaps)
+                               RegionFitter2D (painted 2D regions), TilemapSetup (Composite / Baked tilemaps),
+                               BoneFitter2D + SpriteSkinAccess (skinned sprites, 2D Animation via reflection), SpriteColliderBaker
     Editing/                   ColliderEditTool (EditorTool), ColliderOverlay, ColliderOperations (one Undo step each),
                                ColliderShapes (collider ↔ shape), ColliderPicker, ColliderEditState, ColliderDrawing,
                                VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer,
@@ -60,8 +63,8 @@ Packages/com.fahril.autocollider/
     UI/                        windows, inspectors, settings provider, Strings, AutoColliderStyles, Uss/
     Doctor/                    ColliderDoctor (scan + one-click fixes), DoctorIssue / DoctorCheck / DoctorSeverity
   Tests/Editor/                EditMode tests
-  Tests/Runtime/               PlayMode tests (physics events, throttling, LOD)
-  Samples~/Demo/               demo scene + meshes + sample scripts (registered in package.json; author it in a temp
+  Tests/Runtime/               PlayMode tests (3D + 2D physics events, throttling, LOD, sprite switcher)
+  Samples~/Demo/, Demo 2D/     demo scenes + assets + sample scripts (registered in package.json; author them in a temp
                                Assets/ folder so Unity makes the .meta GUIDs, then move it here with every .meta)
   Documentation~/              user manual
 Docs/ARCHITECTURE_PLAN.md      design (dev-facing)
@@ -154,6 +157,9 @@ Use this when designing fitters, writers, and validators.
 - Concave mesh-collider-style limits don't exist in 2D (any 2D collider works on a dynamic `Rigidbody2D`); a 2D collider under a 3D `Rigidbody` (or the reverse) never collides — different physics worlds.
 - Pixel staircases: enclosing fits see stair corners ~1 px outside the true curve — allow a pixel of slack (capsule caps) or the shape stretches.
 - Edit-tool state, picking and operations take `Component` (3D or 2D). Keep the typed 3D overloads (`IEnumerable<Collider>`) — tests and the 3D code call them — and route mixed selections through the `IEnumerable<Component>` overloads (one Undo group for both parts).
+- `PolygonCollider2D.SetPath` on an enabled collider re-decomposes the whole polygon every call (quadratic in paths: 111 paths = 2.3 s). In the editor write paths through `ColliderWriter2D.SetPaths` (disabled while writing → one decomposition). Never toggle `enabled` in play mode for this (it ends / restarts contacts). Any all-pairs check on outlines (self-intersection, nesting) must stay sub-quadratic — a big tilemap traces to one loop with tens of thousands of points.
+- 2D messages: in `OnCollision*2D`, `Collision2D.otherCollider` is the **receiving** side's collider (ours) and `collider` is the other one — the reverse of what the names suggest. Trigger parts are exact via `Collider2D.IsTouching(other)` (still true on Enter, false on Exit).
+- Skinned sprites: weights / bind poses / indices come from core `UnityEngine.U2D` (`GetVertexAttribute<BoneWeight>(BlendWeight)`, `GetBindPoses`, `GetIndices` — copy them out, the native views belong to the sprite); bone-local point = `bindpose × sprite vertex`. `SpriteSkin` is only read by reflection (`SpriteSkinAccess`) — never add a 2D Animation dependency. The package is installed in this dev project's local manifest only (not committed); tests that need it `Assume` it.
 - Tilemaps: `CompositeCollider2D` requires a `Rigidbody2D` — add the (static) body first, explicitly, so it is Undo-tracked and can be owned. Unity's sprite meshes are too coarse to paint or trace accurately — paint on the alpha-cell grid.
 
 **LODs**

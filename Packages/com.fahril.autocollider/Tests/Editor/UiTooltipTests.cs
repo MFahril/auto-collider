@@ -78,8 +78,10 @@ namespace AutoCollider.Editor.Tests
             group.AddEntry(new ColliderEntry(go.AddComponent<BoxCollider>(), "Box", 0, true));
             go.AddComponent<LODGroup>();
             var animated = go.AddComponent<AnimatedMeshCollider>();
+            var sprite = new GameObject("Inspected Sprite");
+            var switcher = sprite.AddComponent<SpriteColliderSwitcher>();
 
-            foreach (var component in new Object[] { group, animated })
+            foreach (var component in new Object[] { group, animated, switcher })
             {
                 var editor = UnityEditor.Editor.CreateEditor(component);
                 try

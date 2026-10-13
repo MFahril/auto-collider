@@ -25,7 +25,7 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M7 | Polish & release | 1 | ✅ |
 | M8 | 2D core generation | 1, 2, 3, 5 | ✅ |
 | M9 | 2D editing, painting & tilemaps | 4 | ✅ |
-| M10 | 2D runtime, skeletons, Doctor & release | 5 | ⬜ |
+| M10 | 2D runtime, skeletons, Doctor & release | 5 | ✅ |
 
 Criteria: 1 clean UI · 2 optimize · 3 multi-object · 4 scene editing · 5 multi-collider bridge.
 2D design (decided 2026-10-13): one Collider Group for both kinds (an entry holds a `Collider` or a `Collider2D`); sources = sprites, tilemaps, flat meshes (2.5D), sprite skeletons (2D Animation, optional via reflection); no new package dependencies (built-in `physics2d` + `tilemap` modules only).
@@ -239,16 +239,17 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
-## M10 — 2D runtime, skeletons, Doctor & release ⬜ (package 1.3.0)
+## M10 — 2D runtime, skeletons, Doctor & release ✅ (package 1.3.0)
 
-- [ ] `ColliderGroup` 2D events `CollisionEnter2D / Stay2D / Exit2D (entry, Collision2D)`, `TriggerEnter2D / Stay2D / Exit2D (entry, Collider2D)`; `ColliderRelay2D` + `ColliderStayRelay2D` on first subscription; exact part via `Collision2D.otherCollider` + canonical receiver; `TriggerPairs2D` via `Collider2D.IsTouching`; `RefreshRouting` covers both
-- [ ] Sprite skeletons: `BoneFitter2D` (core `Sprite.GetBones / GetBindPoses / GetVertexAttribute<BoneWeight>`; `SpriteSkin.boneTransforms` via reflection, so the 2D Animation package stays optional); Capsule2D per bone on bone children; Auto uses it with a SpriteSkin; symmetric L / R
-- [ ] `SpriteColliderSwitcher`: per-sprite path table baked in the editor (Animator clips or a sprite list), swaps `PolygonCollider2D` paths when the sprite changes
-- [ ] Doctor 2D: too many polygon points → Simplify; TilemapCollider2D without composite → Set Up; 2D collider under a 3D Rigidbody / 3D collider under a Rigidbody2D; 2D object rotated on x / y; duplicate 2D colliders; circle / capsule under non-uniform scale; sprite without physics shape (info)
-- [ ] Demo2D sample (procedural sprite textures, tilemap, flat mesh, sprite-swap character), manual §2D, README, CHANGELOG, `UiTooltipTests` extended, perf: 1,000 sprites + 200×200 tilemap
-- [ ] PlayMode tests: compound Rigidbody2D part once, shared-container triggers, Stay2D only when subscribed, switcher follows the sprite, skeleton colliders follow bones (when the package is present)
+- [x] `ColliderGroup` 2D events `CollisionEnter2D / Stay2D / Exit2D (entry, Collision2D)`, `TriggerEnter2D / Stay2D / Exit2D (entry, Collider2D)`; `ColliderRelay2D` + `ColliderStayRelay2D` on first subscription; exact part via `Collision2D.otherCollider` (the receiving side's collider) + canonical receiver; `TriggerPairs2D` via `Collider2D.IsTouching` (Exit = the pair that stopped touching); `RefreshRouting` covers both
+- [x] Sprite skeletons: `BoneFitter2D` (core sprite data: positions, `BoneWeight` (`BlendWeight` channel), indices, bind poses; each triangle → the bone most of its vertices belong to; traced + fitted in bone space with *Bone Shape*); `SpriteSkinAccess` reads `SpriteSkin.boneTransforms` by reflection, so the 2D Animation package stays optional; `FittedShape2D.Parent` → collider on a child of the bone; Auto / Per Bone; symmetric L / R; converting a bone collider keeps it on its bone (`ColliderShapes2D.ToLocalOf`)
+- [x] `SpriteColliderSwitcher` (runtime: per-sprite paths in sprite units, swapped in `LateUpdate` only when the sprite / flip changes, reused buffer, other-object colliders transformed) + `SpriteColliderBaker` (sprites from the Animator controller's clips, the current sprite and *Extra Sprites*; traced with the Generate settings; one Undo step; adds a Polygon Collider 2D when none is assigned), UI Toolkit inspector (bake, clear with count, unbaked warning), *GameObject ▸ Auto Collider ▸ Add Sprite Collider Switcher*
+- [x] Doctor 2D: polygon > 150 points → Simplify; TilemapCollider2D without composite → Set Up Composite; 2D collider under a 3D Rigidbody / 3D collider under a Rigidbody2D; 2D collider tilted on X / Y; duplicate 2D colliders → Remove; user circle under non-uniform scale; sprites without any collider → Generate. (Changed from the plan: "sprite without physics shape" dropped — outlines come from the pixels, so a missing physics shape no longer matters.)
+- [x] Demo 2D sample (sprites, procedurally drawn 3-frame runner with an Animator + baked switcher, flat gear mesh on a kinematic Rigidbody2D, ground tilemap, three Doctor mistakes, `HitReporter2D` / `BallDropper2D` / `Walker2D` / `DemoHud2D`), manual §14, README, CHANGELOG, `UiTooltipTests` covers the switcher inspector
+- [x] Perf: `Polygon2D.IsSimple` uses a uniform grid above 96 edges (was O(n²) — a noisy 200 × 200 tilemap baked into a single outline with tens of thousands of points hung the editor); also `PolygonCollider2D` paths are written while the collider is disabled (`ColliderWriter2D.SetPaths`: Unity re-decomposes after every `SetPath`; 111 paths 2.3 s → 38 ms). Measured: 1,000 sprites 1.6 s in one batch; 200 × 200 tilemap level (5,777 tiles) Baked 11 ms (86 paths, 175 physics shapes vs 207 Composite, 51 ms); worst case 24,086 random tiles Baked 6.6 s / Composite 1.1 s
+- [x] Tests (EditMode +16): skeletons (bone-space fit, triangle majority, symmetry, SpriteSkin end to end incl. following a bent bone + undo, fallback without a skin), switcher (collect clip / current / extra sprites, bake + undo, swap + flip + unknown sprite, add menu), Doctor 2D (7), grid `IsSimple` vs pairwise; PlayMode (+5): shared-container collision part + exit, compound Rigidbody2D part once per step, triggers resolved by touching (enter / exit per part), Stay2D only when subscribed, switcher follows the sprite and flip
 
-**Done when:** 2D events report the right part; the Doctor finds and fixes seeded 2D issues; the 2D sample imports and plays.
+**Done when:** 2D events report the right part; the Doctor finds and fixes seeded 2D issues; the 2D sample imports and plays. → *Verified 2026-10-13: 234/234 EditMode + 13/13 PlayMode tests (2D Animation installed locally, so the skeleton test ran), console clean, dev scene clean. Demo 2D: the Doctor finds exactly its three seeded mistakes (+ props without colliders); Generate on the props → crate box, pill capsule, rotated plank box, ring / bracket / star / gear polygons, ground composite; in Play the balls are reported per part ("Ball 2 hit Ring ▸ Ring") and the runner's polygon swaps with its frames and flip.**
 
 ---
 
@@ -286,3 +287,4 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-13 | Plan | 2D support planned as M8 (core generation, 1.1.0), M9 (editing, painting, tilemaps, 1.2.0), M10 (runtime, skeletons, Doctor, release, 1.3.0) |
 | 2026-10-13 | M8 ✅ | 2D generation: sprites (pixel tracing), flat meshes, box / circle / capsule / polygon / edge 2D fitters, Auto 2D, separate 2D container, inspector + preview; 198 EditMode + 8 PlayMode tests green; package 1.1.0 |
 | 2026-10-13 | M9 ✅ | 2D editing (handles, point editing, all operations, mixed 3D + 2D selections), 2D painting (sprite paint grid), tilemaps (Composite / Baked); 218 EditMode + 8 PlayMode tests green; package 1.2.0 |
+| 2026-10-13 | M10 ✅ | 2D events (exact parts, relays), per-bone colliders for skinned sprites (2D Animation optional), Sprite Collider Switcher, Doctor 2D (7 checks), Demo 2D sample, big-outline perf fixes; 234 EditMode + 13 PlayMode tests green; package 1.3.0 |

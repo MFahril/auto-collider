@@ -355,3 +355,62 @@ both containers.
 
 **Painting 2D colliders.** Paint mode works on sprites: the brush paints a fine grid of the sprite's opaque pixels. On
 flat meshes it paints the mesh triangles. The regions become 2D colliders and regenerate identically.
+
+**Skinned sprites (2D Animation).** With Unity's 2D Animation package installed, a sprite deformed by a **Sprite Skin**
+gets one collider per bone when Strategy 2D is *Auto* or *Per Bone*. Each triangle of the sprite mesh belongs to the bone
+most of its vertices are weighted to. Each bone's part is traced and fitted in that bone's space, and the collider sits
+on a child of the bone, so it follows the animation with no runtime code. The *Per Bone* settings apply:
+- *Bone Shape*: Capsule (default), Box, Sphere (circle), Convex Hull (convex polygon) or Auto (best primitive).
+- *Bone Weight Threshold*: how strongly a vertex must belong to its bone.
+- *Symmetric Bones*: left / right pairs (`Arm_L` / `Arm_R`, `Left…` / `Right…`) get the same size.
+
+Auto Collider doesn't depend on the 2D Animation package. Without it, or for a sprite without a Sprite Skin, the sprite
+gets its outline colliders as usual.
+
+**Sprite-swap colliders (frame-by-frame animation).** A **Sprite Collider Switcher** keeps one Polygon Collider 2D
+matching whichever sprite the renderer shows:
+1. Add it with *GameObject ▸ Auto Collider ▸ Add Sprite Collider Switcher*, or add the component and press **Bake Sprite
+   Colliders**.
+2. Baking finds every sprite in the clips of the object's Animator (keys on the Sprite Renderer's *Sprite*), plus the
+   current sprite and the *Extra Sprites* list. It traces each one with the current Generate settings (outline source,
+   Quality, Min Island Size) and stores one polygon per sprite. It adds a Polygon Collider 2D when none is assigned.
+3. At runtime the component swaps the collider's paths only when the sprite (or flip X / Y) changes. There is no tracing
+   and no allocation. A sprite without a baked shape keeps the previous paths, and the inspector warns about unbaked
+   sprites.
+
+Re-bake after changing frames or outline settings. Physics only sees the new shape on the next simulation step, so very
+fast swaps can let a contact jump: use simpler shapes (raise the tolerance through Quality) for fast cycles.
+
+**2D collision events.** The Collider Group reports 2D contacts with the part that was hit:
+
+```csharp
+var group = GetComponent<ColliderGroup>();
+group.CollisionEnter2D += (entry, collision) => Debug.Log($"{entry.Label} hit {collision.collider.name}");
+group.TriggerEnter2D  += (entry, other)     => Debug.Log($"{other.name} entered {entry.Label}");
+```
+
+- Stay and Exit events exist for both, like in 3D.
+- Collisions are exact: Unity tells which of the group's colliders touched (`Collision2D.otherCollider` is the group's
+  side).
+- Triggers are resolved with `Collider2D.IsTouching`, so several triggers on one `[Colliders 2D]` object still report the
+  right part.
+- With a Rigidbody2D, each contact is reported once even though Unity sends the message to both the collider's and the
+  body's object.
+- Relays (`ColliderRelay2D`, plus `ColliderStayRelay2D` for Stay) are added in play mode on the first subscription. Call
+  `RefreshRouting()` after adding colliders at runtime.
+
+**Collider Doctor, 2D checks:**
+
+| Check | Severity | Fix |
+|---|---|---|
+| Polygon Collider 2D with more than 150 points | Warning | *Simplify* (0.5 % of its size) |
+| Tilemap Collider 2D without a composite (every tile is its own shape) | Info | *Set Up Composite* |
+| 2D collider under a 3D Rigidbody, or 3D collider under a Rigidbody2D (two physics worlds that never meet) | Warning | — |
+| 2D collider on an object rotated around X / Y (2D physics ignores that rotation) | Info | — |
+| Two identical 2D colliders on one object | Warning | *Remove Duplicate* |
+| Your own Circle Collider 2D under non-uniform scale | Info | — |
+| Visible sprite without any collider (with *Report meshes without colliders*) | Info | *Generate* |
+
+**Demo 2D sample.** *Package Manager ▸ Auto Collider ▸ Samples ▸ Demo 2D* imports a scene with sprites, a flat gear mesh
+and a tilemap to generate, a running character with sprite-swap colliders, three Doctor mistakes, and 2D hit reports in
+Play mode. See its README.

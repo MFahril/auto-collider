@@ -210,6 +210,38 @@ namespace AutoCollider.Editor
             return mirrored;
         }
 
+        /// <summary>
+        /// A group-space shape re-expressed in <paramref name="parent"/>'s local space (local units), with
+        /// <see cref="FittedShape2D.Parent"/> set — for colliders that must stay on a bone.
+        /// </summary>
+        public static FittedShape2D ToLocalOf(FittedShape2D shape, Transform parent, in TargetSpace space, float z)
+        {
+            var local = shape.Clone();
+            local.Parent = parent;
+            var k = 1f / math.max(math.cmax(math.abs(((float3)parent.lossyScale).xy)), 1e-6f);
+            var space_ = space;
+            float2 ToParent(float2 p) => ((float3)parent.InverseTransformPoint(ToWorld(space_, p, z))).xy;
+
+            local.Center = ToParent(shape.Center);
+            var (u, _) = Axes(shape.Angle);
+            var x = ToParent(shape.Center + u) - local.Center;
+            local.Angle = math.degrees(math.atan2(x.y, x.x));
+            local.Size = shape.Size * k;
+            local.Radius = shape.Radius * k;
+            local.Height = shape.Height * k;
+            if (shape.Paths != null)
+            {
+                var paths = new float2[shape.Paths.Length][];
+                for (var p = 0; p < paths.Length; p++)
+                {
+                    paths[p] = new float2[shape.Paths[p].Length];
+                    for (var i = 0; i < paths[p].Length; i++) paths[p][i] = ToParent(shape.Paths[p][i]);
+                }
+                local.Paths = paths;
+            }
+            return local;
+        }
+
         /// <summary>Rotated boxes / capsules can't be represented under unequal X / Y scale: refit axis-aligned.</summary>
         public static FittedShape2D EnsureRepresentable(FittedShape2D shape, in TargetSpace space)
         {

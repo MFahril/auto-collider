@@ -47,6 +47,12 @@ namespace AutoCollider.Editor
                 return new List<float2[]> { new[] { -half, new float2(half.x, -half.y), half, new float2(-half.x, half.y) } };
             }
 
+            return Loops(sprite, settings, warnings);
+        }
+
+        /// <summary>Outline of <paramref name="sprite"/> itself, in sprite units (relative to the pivot, unflipped). Read-only, may be cached.</summary>
+        public static List<float2[]> Loops(Sprite sprite, GenerationSettings settings, ICollection<string> warnings)
+        {
             var key = (sprite, settings.OutlineSource, settings.AlphaThreshold, settings.OutlineResolution);
             if (FitCache.Active && Cache.TryGetValue(key, out var cached)) return cached;
             var loops = ReadSprite(sprite, settings, warnings);
