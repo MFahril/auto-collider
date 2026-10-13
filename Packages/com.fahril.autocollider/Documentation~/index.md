@@ -28,7 +28,7 @@ Requirements: Unity **6000.6** or newer. Burst and Collections are pulled in aut
 - **Git URL:** *Window ▸ Package Manager ▸ + ▸ Add package from git URL…*
   `https://github.com/MFahril/auto-collider.git?path=/Packages/com.fahril.autocollider`
 - **Embedded:** copy the `com.fahril.autocollider` folder into your project's `Packages/` folder.
-- **Demo:** *Package Manager ▸ Auto Collider ▸ Samples ▸ Demo ▸ Import* (URP materials). Its README walks through every feature.
+- **Demos:** *Package Manager ▸ Auto Collider ▸ Samples ▸ Demo* (3D, URP materials) and *Demo 2D* *▸ Import*. Each README walks through every feature.
 
 The runtime part (`AutoCollider.Runtime`) has no editor dependencies, so player builds are unaffected; everything heavy
 (fitting, simplification, decomposition) runs only in the editor.
@@ -277,7 +277,7 @@ active.
 **Menus:**
 - *Tools ▸ Auto Collider ▸* Open Window, Run Doctor, Project Settings…
 - *GameObject ▸ Auto Collider ▸* (also on right-click in the Hierarchy) Generate Colliders, Remove Generated Colliders,
-  Paint Colliders, Add Animated Mesh Collider.
+  Paint Colliders, Add Animated Mesh Collider, Add Sprite Collider Switcher.
 
 ## 13. Tips, limits and troubleshooting
 
