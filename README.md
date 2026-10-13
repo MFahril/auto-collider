@@ -14,9 +14,31 @@ press **Shift+Alt+C**, and each one gets a fitted collider: a box, sphere or cap
 parts, or a simplified mesh collider. Sprites, tilemaps and flat meshes get 2D colliders the same way. Everything is
 undoable, it never deletes colliders you made, and the runtime part has no editor code, so player builds stay clean.
 
+## Installation
+
+Requirements: **Unity 6000.6 or newer**. Burst and Collections are installed automatically.
+
+**Package Manager (Git URL).** Open *Window ▸ Package Manager ▸ + ▸ Add package from git URL…* and enter:
+
+```
+https://github.com/MFahril/auto-collider.git?path=/Packages/com.fahril.autocollider
+```
+
+**Or add it to `Packages/manifest.json`:**
+
+```json
+{
+  "dependencies": {
+    "com.fahril.autocollider": "https://github.com/MFahril/auto-collider.git?path=/Packages/com.fahril.autocollider"
+  }
+}
+```
+
+**Or embed it:** copy [`Packages/com.fahril.autocollider`](Packages/com.fahril.autocollider) into your project's
+`Packages/` folder.
+
 ## Contents
 - [Features](#features)
-- [Installation](#installation)
 - [Quick start](#quick-start)
 - [Collision events in code](#collision-events-in-code)
 - [Strategies](#strategies)
@@ -82,29 +104,6 @@ Every generated object gets a **Collider Group**, which treats all of its collid
   - 2D and 3D physics mixed on one object
   - 2D objects tilted out of their plane
 - *Fix All* applies every fix as a single undo step.
-
-## Installation
-
-Requirements: **Unity 6000.6 or newer**. Burst and Collections are installed automatically.
-
-**Package Manager (Git URL).** Open *Window ▸ Package Manager ▸ + ▸ Add package from git URL…* and enter:
-
-```
-https://github.com/MFahril/auto-collider.git?path=/Packages/com.fahril.autocollider
-```
-
-**Or add it to `Packages/manifest.json`:**
-
-```json
-{
-  "dependencies": {
-    "com.fahril.autocollider": "https://github.com/MFahril/auto-collider.git?path=/Packages/com.fahril.autocollider"
-  }
-}
-```
-
-**Or embed it:** copy [`Packages/com.fahril.autocollider`](Packages/com.fahril.autocollider) into your project's
-`Packages/` folder.
 
 ## Quick start
 
