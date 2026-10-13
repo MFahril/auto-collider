@@ -39,6 +39,36 @@ namespace AutoCollider.Editor
             return cached.ConvertAll(s => s.Clone());
         }
 
+        private static Dictionary<(ulong outline, string settings, bool rotation), List<FittedShape2D>> _entries2D;
+
+        /// <summary>2D: fit <paramref name="outline"/>, or return copies of an identical earlier fit.</summary>
+        public static List<FittedShape2D> Fit2D(IColliderStrategy2D strategy, Outline2D outline, FitContext context, string settingsKey)
+        {
+            if (_entries == null || settingsKey == null) return strategy.Fit(outline, context);
+
+            _entries2D ??= new Dictionary<(ulong, string, bool), List<FittedShape2D>>();
+            var key = (Hash(outline), settingsKey, context.AllowRotation);
+            if (_entries2D.TryGetValue(key, out var cached)) Hits++;
+            else _entries2D[key] = cached = strategy.Fit(outline, context);
+            return cached.ConvertAll(s => s.Clone());
+        }
+
+        private static ulong Hash(Outline2D outline)
+        {
+            const ulong prime = 1099511628211UL;
+            var hash = 14695981039346656037UL;
+            foreach (var loop in outline.Loops)
+            {
+                hash = (hash ^ (uint)loop.Length) * prime;
+                foreach (var p in loop)
+                {
+                    hash = (hash ^ math.asuint(p.x)) * prime;
+                    hash = (hash ^ math.asuint(p.y)) * prime;
+                }
+            }
+            return hash;
+        }
+
         /// <summary>64-bit FNV-1a over vertex bits and indices.</summary>
         private static ulong Hash(MeshGeometry part)
         {
@@ -64,7 +94,12 @@ namespace AutoCollider.Editor
 
         private sealed class Handle : IDisposable
         {
-            public void Dispose() => _entries = null;
+            public void Dispose()
+            {
+                _entries = null;
+                _entries2D = null;
+                SpriteSource.ClearCache();
+            }
         }
     }
 }

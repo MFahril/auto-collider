@@ -1,6 +1,6 @@
 {
   "name": "com.fahril.autocollider",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Auto Collider",
   "description": "Generate, optimize and edit colliders for one or many objects: fitted primitives, convex hulls, convex decomposition, simplified mesh colliders, painted and per-bone colliders, in-scene collider editing, a Collider Doctor, and a Collider Group component that handles all of an object's colliders (and their collision events) as one.",
   "unity": "6000.6",
@@ -19,7 +19,9 @@
   "dependencies": {
     "com.unity.burst": "2.0.0",
     "com.unity.collections": "6.6.0",
-    "com.unity.modules.physics": "1.0.0"
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.physics2d": "1.0.0",
+    "com.unity.modules.tilemap": "1.0.0"
   },
   "samples": [
     {

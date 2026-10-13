@@ -34,7 +34,8 @@ Packages/com.fahril.autocollider/
   package.json
   Runtime/                     AutoCollider.Runtime  (NO UnityEditor)
     ColliderGroup.cs           multi-collider "bridge" (ownership, bulk API, events)
-    ColliderEntry.cs, GenerationRecipe.cs, GenerationSettings.cs (+ strategy/granularity/replace enums), PhysicsLimits.cs
+    ColliderEntry.cs           one tracked collider: a Collider OR a Collider2D (Is2D, Component, IsAlive, Enabled, IsTrigger)
+    GenerationRecipe.cs, GenerationSettings.cs (+ strategy/granularity/replace/dimension/strategy2D/outline enums), PhysicsLimits.cs
     PaintedRegion.cs, PartShape.cs  painted parts stored in the recipe (ids ≥ 10000 = entry PartId)
     ColliderRelay.cs (+ ColliderStayRelay, TriggerPairs)  routes physics messages to the group (added at runtime on first event subscription)
     AnimatedMeshCollider.cs (+ RefreshSchedule)  runtime skinned/blendshape collider refresh, throttled
@@ -43,10 +44,13 @@ Packages/com.fahril.autocollider/
     PackagePaths.cs            every hard-coded asset path (package root, USS, settings asset)
     AutoColliderSettings.cs    project settings singleton + AutoColliderSettingsData
     Core/                      MeshSource, MeshGeometry, TargetSpace, Fitting/ (box/sphere/capsule), QuickHull3D (pure math)
+    Core2D/                    SpriteSource (sprite / flat-mesh outlines), OutlineTracer (Burst raster → loops), PolygonSimplifier,
+                               Polygon2D, Outline2D, Box2DFitter, CircleFitter, Capsule2DFitter
     Optimization/              ClusterSimplifier (Burst, QEM), MeshCleaner, InflateDeflate, ErrorMetric (Burst), MeshOptimizer, ColliderOptimizer,
                                Voxelizer (Burst), ConvexDecomposer, PrimitiveReplacer, stats
     Generation/                settings, presets, strategies, pipeline, batch, writer, mesh store,
                                RegionFitter (painted region → shapes, shared by paint tool + pipeline), BoneFitter (per-bone)
+    Generation2D/              FittedShape2D, Strategies2D (Auto 2D), GenerationPipeline2D (routing + fit), ColliderWriter2D
     Editing/                   ColliderEditTool (EditorTool), ColliderOverlay, ColliderOperations (one Undo step each),
                                ColliderShapes (collider ↔ shape), ColliderPicker, ColliderEditState, ColliderDrawing,
                                VertexSnapping, ColliderToolCommands (+ shortcut context), ShapeDrawing, PreviewDrawer, HeatmapDrawer,
@@ -61,7 +65,7 @@ Packages/com.fahril.autocollider/
 Docs/ARCHITECTURE_PLAN.md      design (dev-facing)
 Docs/ROADMAP.md                milestone tracker — tick tasks here
 Assets/Mystery Studio/         THIRD-PARTY REFERENCE — READ ONLY
-Assets/AutoCollider Dev/       dev test scene (primitive props) for manual checks
+Assets/AutoCollider Dev/       dev test scenes for manual checks: M1 Test Scene (3D props), M8 2D Test Scene (+ 2D/ sprites)
 Assets/Sample Model/           (empty) place real test models here
 ```
 
@@ -138,6 +142,15 @@ Use this when designing fitters, writers, and validators.
   Bone-local bind pose = `mesh.bindposes[b].MultiplyPoint(sharedMesh vertex)` — no bake needed. Such shapes carry `FittedShape.Parent` (parent-local, not scaled space).
 - Painted triangle indices refer to the triangles `MeshSource` reads (unreferenced vertices dropped, submeshes concatenated) — read through `MeshSource`, never `mesh.triangles`, wherever indices are stored or matched.
 - Runtime MeshCollider refresh is expensive; throttle (`EveryNFrames` / `TargetHz`), only when visible, never with convex decomposition.
+
+**2D physics (Box2D)**
+- A GameObject can't hold both a 3D `Collider` and a `Collider2D` (Unity refuses the second kind) → 2D colliders go on `[Colliders 2D]` (`ColliderGroup.Container2D`), never on the 3D container.
+- 2D colliders live in their object's **XY plane**; X/Y rotation of the object is ignored by 2D physics. Rotated 2D primitives need their own child with a **Z** rotation (only under equal, positive X/Y scale).
+- `CircleCollider2D` scales by max(|sx|, |sy|); `CapsuleCollider2D` / `BoxCollider2D` by each axis; polygon / edge points scale exactly.
+- `PolygonCollider2D` takes several paths (even-odd: inner paths are holes) and decomposes concave shapes itself; `EdgeCollider2D` is hollow (border only). Closed edge loops repeat the first point.
+- Unity's **generated** sprite physics shape and tight sprite mesh are coarse enclosing polygons (64 px disc → 9 points, +16 % radius): trace the pixels instead (RenderTexture blit — works without Read/Write). Custom physics shapes are only used when chosen explicitly.
+- Concave mesh-collider-style limits don't exist in 2D (any 2D collider works on a dynamic `Rigidbody2D`); a 2D collider under a 3D `Rigidbody` (or the reverse) never collides — different physics worlds.
+- Pixel staircases: enclosing fits see stair corners ~1 px outside the true curve — allow a pixel of slack (capsule caps) or the shape stretches.
 
 **LODs**
 - Generate from **LOD0** by default. Optional `ColliderLodFollower` enables only the colliders for the active LOD.

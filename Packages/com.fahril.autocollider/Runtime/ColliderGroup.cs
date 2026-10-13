@@ -15,9 +15,10 @@ namespace AutoCollider
     {
         [SerializeField] private List<ColliderEntry> _entries = new();
         [SerializeField] private Transform _container;
+        [SerializeField] private Transform _container2D;
         [SerializeField] private GenerationRecipe _recipe = new();
 
-        private Dictionary<Collider, ColliderEntry> _lookup;
+        private Dictionary<Component, ColliderEntry> _lookup;
         private TriggerPairs _triggerPairs;
         private bool _routing;
         private bool _stayRouting;
@@ -28,12 +29,26 @@ namespace AutoCollider
         /// <summary>All tracked colliders (generated and manually registered).</summary>
         public IReadOnlyList<ColliderEntry> Entries => _entries;
 
-        /// <summary>Child object that holds generated colliders. May be null before the first generation.</summary>
+        /// <summary>Child object that holds generated 3D colliders. May be null before the first generation.</summary>
         public Transform Container
         {
             get => _container;
             internal set => _container = value;
         }
+
+        /// <summary>
+        /// Child object that holds generated 2D colliders (Unity doesn't allow 2D and 3D colliders on one GameObject).
+        /// May be null before the first 2D generation.
+        /// </summary>
+        public Transform Container2D
+        {
+            get => _container2D;
+            internal set => _container2D = value;
+        }
+
+        /// <summary>True when <paramref name="t"/> is (or is inside) one of the generated-collider containers.</summary>
+        public bool IsInContainer(Transform t) =>
+            t != null && ((_container != null && t.IsChildOf(_container)) || (_container2D != null && t.IsChildOf(_container2D)));
 
         /// <summary>Settings that produced the generated colliders (used by Regenerate).</summary>
         public GenerationRecipe Recipe => _recipe ??= new GenerationRecipe();
@@ -45,7 +60,7 @@ namespace AutoCollider
             {
                 var count = 0;
                 foreach (var entry in _entries)
-                    if (entry.Collider != null) count++;
+                    if (entry.IsAlive) count++;
                 return count;
             }
         }
@@ -59,10 +74,9 @@ namespace AutoCollider
                 var bounds = new Bounds(transform.position, Vector3.zero);
                 foreach (var entry in _entries)
                 {
-                    var c = entry.Collider;
-                    if (c == null || !c.enabled) continue;
-                    if (hasAny) bounds.Encapsulate(c.bounds);
-                    else bounds = c.bounds;
+                    if (!entry.IsAlive || !entry.Enabled) continue;
+                    if (hasAny) bounds.Encapsulate(entry.Bounds);
+                    else bounds = entry.Bounds;
                     hasAny = true;
                 }
                 return bounds;
@@ -194,70 +208,80 @@ namespace AutoCollider
 
         // ---------- Queries ----------
 
-        /// <summary>Find the entry that tracks <paramref name="collider"/>.</summary>
-        public bool TryGetEntry(Collider collider, out ColliderEntry entry)
+        /// <summary>Find the entry that tracks the 3D <paramref name="collider"/>.</summary>
+        public bool TryGetEntry(Collider collider, out ColliderEntry entry) => TryFind(collider, out entry);
+
+        /// <summary>Find the entry that tracks the 2D <paramref name="collider"/>.</summary>
+        public bool TryGetEntry(Collider2D collider, out ColliderEntry entry) => TryFind(collider, out entry);
+
+        private bool TryFind(Component collider, out ColliderEntry entry)
         {
             entry = null;
             if (collider == null) return false;
 
             _lookup ??= BuildLookup();
-            if (_lookup.TryGetValue(collider, out entry) && entry.Collider == collider) return true;
+            if (_lookup.TryGetValue(collider, out entry) && entry.Component == collider) return true;
 
             // Entries can be re-pointed (edit tool) — rebuild once before giving up.
             _lookup = BuildLookup();
             return _lookup.TryGetValue(collider, out entry);
         }
 
-        private Dictionary<Collider, ColliderEntry> BuildLookup()
+        private Dictionary<Component, ColliderEntry> BuildLookup()
         {
-            var lookup = new Dictionary<Collider, ColliderEntry>(_entries.Count);
+            var lookup = new Dictionary<Component, ColliderEntry>(_entries.Count);
             foreach (var e in _entries)
-                if (e.Collider != null) lookup[e.Collider] = e;
+            {
+                var component = e.Component;
+                if (component != null) lookup[component] = e;
+            }
             return lookup;
         }
 
-        /// <summary>Entries matching a predicate (live colliders only).</summary>
+        /// <summary>Entries matching a predicate (live colliders only, 3D and 2D).</summary>
         public IEnumerable<ColliderEntry> Where(Func<ColliderEntry, bool> predicate)
         {
             foreach (var e in _entries)
-                if (e.Collider != null && predicate(e))
+                if (e.IsAlive && predicate(e))
                     yield return e;
         }
 
         // ---------- Bulk control ----------
 
-        /// <summary>Enable or disable every tracked collider.</summary>
+        /// <summary>Enable or disable every tracked collider (3D and 2D).</summary>
         public void SetEnabled(bool enabled)
         {
             foreach (var e in _entries)
-                if (e.Collider != null) e.Collider.enabled = enabled;
+                if (e.IsAlive) e.Enabled = enabled;
         }
 
-        /// <summary>Set <see cref="Collider.isTrigger"/> on every tracked collider. Concave mesh colliders cannot be triggers and are skipped.</summary>
+        /// <summary>Set the trigger flag on every tracked collider (3D and 2D). Concave mesh colliders cannot be triggers and are skipped.</summary>
         public void SetTrigger(bool isTrigger)
         {
             foreach (var e in _entries)
-            {
-                var c = e.Collider;
-                if (c == null) continue;
-                if (isTrigger && c is MeshCollider { convex: false }) continue;
-                c.isTrigger = isTrigger;
-            }
+                if (e.IsAlive) e.IsTrigger = isTrigger;
         }
 
-        /// <summary>Assign a physics material to every tracked collider.</summary>
+        /// <summary>Assign a physics material to every tracked 3D collider.</summary>
         public void SetPhysicsMaterial(PhysicsMaterial material)
         {
             foreach (var e in _entries)
                 if (e.Collider != null) e.Collider.sharedMaterial = material;
         }
 
-        /// <summary>Move every collider's GameObject to <paramref name="layer"/>. Only objects that hold nothing but colliders are changed, so source meshes keep their layer.</summary>
+        /// <summary>Assign a 2D physics material to every tracked 2D collider.</summary>
+        public void SetPhysicsMaterial(PhysicsMaterial2D material)
+        {
+            foreach (var e in _entries)
+                if (e.Collider2D != null) e.Collider2D.sharedMaterial = material;
+        }
+
+        /// <summary>Move every collider's GameObject to <paramref name="layer"/>. Only objects that hold nothing but colliders are changed, so source meshes and sprites keep their layer.</summary>
         public void SetLayer(int layer)
         {
             foreach (var e in _entries)
             {
-                var c = e.Collider;
+                var c = e.Component;
                 if (c == null) continue;
                 if (c.transform == transform || c.GetComponent<Renderer>() != null) continue;
                 c.gameObject.layer = layer;
@@ -273,14 +297,24 @@ namespace AutoCollider
             foreach (var e in _entries)
             {
                 var c = e.Collider;
-                if (c == null) continue;
-                c.includeLayers = include;
-                c.excludeLayers = exclude;
-                c.layerOverridePriority = priority;
+                if (c != null)
+                {
+                    c.includeLayers = include;
+                    c.excludeLayers = exclude;
+                    c.layerOverridePriority = priority;
+                }
+
+                var c2 = e.Collider2D;
+                if (c2 != null)
+                {
+                    c2.includeLayers = include;
+                    c2.excludeLayers = exclude;
+                    c2.layerOverridePriority = priority;
+                }
             }
         }
 
-        /// <summary>Turn contact reporting for <c>Physics.ContactEvent</c> on or off for every tracked collider.</summary>
+        /// <summary>Turn contact reporting for <c>Physics.ContactEvent</c> on or off for every tracked 3D collider.</summary>
         public void SetProvidesContacts(bool providesContacts)
         {
             foreach (var e in _entries)
@@ -305,7 +339,7 @@ namespace AutoCollider
         internal int RemoveMissing()
         {
             _lookup = null;
-            return _entries.RemoveAll(e => e.Collider == null);
+            return _entries.RemoveAll(e => !e.IsAlive);
         }
 
         void ISerializationCallbackReceiver.OnBeforeSerialize()

@@ -2,7 +2,7 @@
 
 Unity editor tool to **generate, optimize and edit colliders** for one or many objects.
 
-> **1.0.0** — full user manual in [`Documentation~/index.md`](Documentation~/index.md); a Demo sample is available in the Package Manager (*Samples ▸ Demo*).
+> **1.1.0** — now with **2D colliders** for sprites and flat meshes. Full user manual in [`Documentation~/index.md`](Documentation~/index.md); a Demo sample is available in the Package Manager (*Samples ▸ Demo*).
 
 ## Requirements
 - Unity 6000.6 or newer
@@ -30,6 +30,14 @@ Unity editor tool to **generate, optimize and edit colliders** for one or many o
 | Optimized Mesh | Simplified copy of the mesh, keeps holes and concave shapes (static / kinematic objects) |
 | Convex Decomposition | Several convex parts (boxes / spheres / capsules where they fit) — concave shapes on moving Rigidbodies |
 | Per Bone | Skinned meshes: one collider per bone, parented to the bone so it follows the animation |
+
+## 2D: sprites and flat meshes
+Select sprites and press **Shift+Alt+C** — they get **2D colliders** (Box / Circle / Capsule / Polygon / Edge Collider 2D) in the same Collider Group, on a `[Colliders 2D]` child. With **Auto**, each sprite gets the cheapest shape that fits its opaque pixels: a box, circle or capsule when one fills it, else one convex polygon, else a simplified outline polygon (holes included).
+
+- Outlines are traced from the sprite's pixels (no Read/Write needed). Pick *Physics Shape* to use a custom physics shape drawn in the Sprite Editor.
+- Meshes get 2D colliders too when a **Rigidbody2D** moves them, or when **Dimension** is *2D* — their silhouette seen along the object's Z axis (2.5D games with 3D art).
+- *Generate ▸ 2D* sets Dimension, the 2D strategy, outline source, alpha threshold, outline resolution and a Physics Material 2D. Quality controls outline detail.
+- 2D scene editing, painting and tilemaps arrive in 1.2.0; 2D collision events, sprite skeletons and the 2D Doctor in 1.3.0.
 
 ## Editing colliders in the Scene view
 Select an object with a **Collider Group** and click **Edit in Scene** (or pick the tool in the Tools overlay). Click colliders to select them (click again to cycle through overlaps, drag to box-select), then:

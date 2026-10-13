@@ -3,6 +3,18 @@
 All notable changes to this package are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [1.1.0] - 2026-10-13
+
+### Added
+- **2D colliders** (M8) for sprites and flat meshes, in the same Collider Group: Box / Circle / Capsule / Polygon / Edge Collider 2D on a `[Colliders 2D]` child (rotated boxes and capsules on their own child).
+  - **Auto 2D** picks a box, circle or capsule when one fills the outline, else one convex polygon, else the simplified outline polygon (holes included). Strategies: Best Primitive, Box, Circle, Capsule, Convex Polygon, Polygon, Edge.
+  - Sprite outlines are traced from the opaque pixels (no Read/Write needed); a custom physics shape or the sprite mesh can be used instead. Sliced / tiled sprites, flipped sprites, non-uniform scale and Combined granularity are handled.
+  - Meshes get 2D colliders (their silhouette along Z) when a Rigidbody2D moves them or Dimension is 2D.
+  - Settings: Dimension, Strategy 2D, Outline Source, Alpha Threshold, Outline Resolution, Physics Material 2D ("2D" foldout in the Generate tab). Live preview draws 2D shapes.
+- `ColliderEntry` can track a `Collider2D` (`Collider2D`, `Is2D`, `Component`, `IsAlive`, `Enabled`, `IsTrigger`, `Bounds`); `ColliderGroup` bulk API covers 2D colliders, plus `SetPhysicsMaterial(PhysicsMaterial2D)`, `TryGetEntry(Collider2D)`, `Container2D`.
+- Inspector: 2D rows, Physics Material 2D bulk field, 2D layer overrides.
+- Package dependencies: the built-in 2D Physics and Tilemap modules.
+
 ## [1.0.0] - 2026-10-12
 
 First complete release: generation, optimization, decomposition, scene editing, painting, characters, runtime events and

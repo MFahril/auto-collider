@@ -42,6 +42,8 @@ namespace AutoCollider.Editor
                 foreach (var shape in result.Shapes)
                     ShapeDrawing.Draw(shape, shape.Parent != null ? shape.Parent.localToWorldMatrix : scaledToWorld,
                         ShapeDrawing.ColorFor(shape.Kind, settings));
+                foreach (var shape in result.Shapes2D)
+                    ShapeDrawing2D.Draw(shape, scaledToWorld, ShapeDrawing2D.ColorFor(shape.Kind, settings));
             }
         }
     }

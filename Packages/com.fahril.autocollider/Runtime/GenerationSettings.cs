@@ -100,6 +100,26 @@ namespace AutoCollider
         [Tooltip("Give left / right bone pairs (…_L / …_R, Left… / Right…) the same collider size.")]
         public bool SymmetricBones = true;
 
+        [Tooltip("Auto: sprites get 2D colliders, meshes 3D (2D when a Rigidbody2D moves them). 3D: only 3D colliders. 2D: 2D colliders for everything, meshes included (their silhouette along the object's Z axis).")]
+        public ColliderDimension Dimension = ColliderDimension.Auto;
+
+        [Tooltip("How 2D colliders are shaped. Auto picks a box / circle / capsule when one fits, else a convex or outline polygon.")]
+        public ColliderStrategy2D Strategy2D = ColliderStrategy2D.Auto;
+
+        [Tooltip("Where a sprite's outline comes from. Auto traces the opaque pixels (exact). Physics Shape uses the sprite's (custom) physics shape; Sprite Mesh its render mesh.")]
+        public OutlineSource OutlineSource = OutlineSource.Auto;
+
+        [Tooltip("Alpha tracing: pixels at least this opaque count as solid.")]
+        [Range(0.01f, 1f)]
+        public float AlphaThreshold = 0.25f;
+
+        [Tooltip("Cells along the longest side when tracing alpha or flat-mesh silhouettes. Higher = more precise outline, slower.")]
+        [Range(32, 512)]
+        public int OutlineResolution = 128;
+
+        [Tooltip("2D physics material assigned to generated 2D colliders (optional).")]
+        public PhysicsMaterial2D Material2D;
+
         /// <summary>Deep copy (the material reference is shared).</summary>
         public GenerationSettings Clone() => (GenerationSettings)MemberwiseClone();
     }

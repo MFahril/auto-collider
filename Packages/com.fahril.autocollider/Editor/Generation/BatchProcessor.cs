@@ -116,7 +116,7 @@ namespace AutoCollider.Editor
             {
                 if (target == null || !target.TryGetComponent<ColliderGroup>(out var group)) continue;
                 foreach (var entry in group.Entries)
-                    if (entry.Generated && !entry.Locked && entry.Collider != null) count++;
+                    if (entry.Generated && !entry.Locked && entry.IsAlive) count++;
             }
             return count;
         }

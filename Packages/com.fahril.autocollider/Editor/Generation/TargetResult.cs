@@ -22,6 +22,12 @@ namespace AutoCollider.Editor
         public GameObject Target { get; }
         public TargetSpace Space { get; set; }
         public List<FittedShape> Shapes { get; } = new();
+
+        /// <summary>2D shapes (sprites, flat meshes) — written as Collider2D components.</summary>
+        public List<FittedShape2D> Shapes2D { get; } = new();
+
+        /// <summary>3D + 2D shapes.</summary>
+        public int ShapeCount => Shapes.Count + Shapes2D.Count;
         public List<string> Warnings { get; } = new();
 
         /// <summary>Informational notes, e.g. what the Auto strategy chose.</summary>
@@ -49,7 +55,8 @@ namespace AutoCollider.Editor
 
         public void Warn(string warning)
         {
-            Warnings.Add(warning);
+            // The 2D and 3D passes can raise the same warning (e.g. non-uniform scale) — report it once.
+            if (!Warnings.Contains(warning)) Warnings.Add(warning);
             if (Status == TargetStatus.Ok) Status = TargetStatus.Warning;
         }
     }

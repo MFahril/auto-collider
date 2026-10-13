@@ -90,6 +90,17 @@ namespace AutoCollider.Editor
             skinned.Add(Field(settings, nameof(GenerationSettings.MinBoneVertices)));
             skinned.Add(Field(settings, nameof(GenerationSettings.SymmetricBones)));
 
+            var twoD = Foldout(this, Strings.Section2D, "AutoCollider.Generate.TwoD");
+            var twoDHint = new Label(Strings.Hint2D);
+            twoDHint.AddToClassList("ac-hint");
+            twoD.Add(twoDHint);
+            twoD.Add(Field(settings, nameof(GenerationSettings.Dimension)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.Strategy2D)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.OutlineSource)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.AlphaThreshold)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.OutlineResolution)));
+            twoD.Add(Field(settings, nameof(GenerationSettings.Material2D)));
+
             var decomposition = Foldout(this, Strings.SectionDecomposition, "AutoCollider.Generate.Decomposition");
             var decompositionHint = new Label(Strings.DecompositionHint);
             decompositionHint.AddToClassList("ac-hint");
@@ -242,7 +253,7 @@ namespace AutoCollider.Editor
             {
                 var result = GenerationPipeline.Compute(target, Settings);
                 results.Add(result);
-                shapes += result.Shapes.Count;
+                shapes += result.ShapeCount;
                 if (result.HasMeshStats) stats.Add(result.Stats);
             }
             PreviewDrawer.Show(results);
@@ -338,7 +349,7 @@ namespace AutoCollider.Editor
             row.Q<Image>("icon").image = AssetPreview.GetMiniTypeThumbnail(typeof(GameObject));
             row.Q<Label>("name").text = go.name;
 
-            var renderers = MeshSource.CollectRenderers(go, Settings, null).Count;
+            var renderers = MeshSource.CollectRenderers(go, Settings, null, includeSprites: true).Count;
             var existing = go.TryGetComponent<ColliderGroup>(out var group) ? group.LiveCount : 0;
             row.Q<Label>("info").text = existing > 0
                 ? string.Format(Strings.TargetInfoWithColliders, renderers, existing)

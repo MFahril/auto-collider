@@ -26,12 +26,13 @@ namespace AutoCollider.Editor
             }
             result.Space = space;
 
-            var context = CreateContext(target, settings, space, result);
+            var context = CreateContext(target, settings, space);
 
             // Painted regions are authored data: when a group has them, they define its colliders.
             var group = target.GetComponent<ColliderGroup>();
             if (group != null && group.Recipe.HasRegions)
             {
+                context = CreateContext(target, settings, space, result);
                 ComputeRegions(group, settings, context, space, result);
                 if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
                 return result;
@@ -47,7 +48,7 @@ namespace AutoCollider.Editor
             }
 
             var warnings = new List<string>();
-            var renderers = MeshSource.CollectRenderers(target, collectSettings, warnings);
+            var renderers = MeshSource.CollectRenderers(target, collectSettings, warnings, includeSprites: true);
             var lodOf = lodGroup != null ? LodLevels(target, lodGroup, renderers) : null;
             if (lodOf != null && lodOf.Count > 0) result.LodGroup = lodGroup;
             foreach (var w in warnings) result.Warn(w);
@@ -58,8 +59,22 @@ namespace AutoCollider.Editor
                 return result;
             }
 
+            // Sprites (and meshes moved by a Rigidbody2D, or everything when Dimension is 2D) get 2D colliders.
+            var renderers3D = new List<Renderer>(renderers.Count);
+            var renderers2D = new List<Renderer>();
+            var skippedSprites = 0;
+            foreach (var renderer in renderers)
+            {
+                if (GenerationPipeline2D.Is2D(renderer, target, settings)) renderers2D.Add(renderer);
+                else if (SpriteSource.IsSprite(renderer)) skippedSprites++;
+                else renderers3D.Add(renderer);
+            }
+            if (skippedSprites > 0) result.Warn(string.Format(Strings.WarningSpritesSkipped3D, skippedSprites));
+            if (renderers2D.Count > 0) GenerationPipeline2D.Compute(target, settings, renderers2D, space, result);
+            if (renderers3D.Count > 0 && settings.AllowRotation && !space.IsUniform) result.Warn(Strings.WarningNonUniformScale);
+
             var strategyKind = settings.Strategy;
-            if (strategyKind == ColliderStrategy.OptimizedMesh && context.IsDynamic)
+            if (strategyKind == ColliderStrategy.OptimizedMesh && context.IsDynamic && renderers3D.Count > 0)
             {
                 // PhysX: non-kinematic Rigidbodies cannot use concave mesh colliders.
                 result.Warn(Strings.WarningDynamicConcave);
@@ -71,9 +86,9 @@ namespace AutoCollider.Editor
             var perBone = strategyKind == ColliderStrategy.PerBone || strategyKind == ColliderStrategy.Auto;
             var strategy = StrategyRegistry.Get(strategyKind == ColliderStrategy.PerBone ? ColliderStrategy.Auto : strategyKind, settings);
 
-            var parts = new List<MeshGeometry>(renderers.Count);
-            var partLods = new List<int>(renderers.Count);
-            foreach (var renderer in renderers)
+            var parts = new List<MeshGeometry>(renderers3D.Count);
+            var partLods = new List<int>(renderers3D.Count);
+            foreach (var renderer in renderers3D)
             {
                 var lod = lodOf != null && lodOf.TryGetValue(renderer, out var level) ? level : -1;
                 var before = result.Shapes.Count;
@@ -120,7 +135,7 @@ namespace AutoCollider.Editor
                 }
             }
 
-            if (result.Shapes.Count == 0) result.Skip(Strings.SkipNoMeshes);
+            if (result.ShapeCount == 0) result.Skip(Strings.SkipNoMeshes);
             return result;
         }
 

@@ -40,7 +40,7 @@ namespace AutoCollider.Editor
         public static bool IsGeneratedObject(GameObject go)
         {
             foreach (var group in go.GetComponentsInParent<ColliderGroup>(true))
-                if (group.Container != null && go.transform.IsChildOf(group.Container))
+                if (group.IsInContainer(go.transform))
                     return true;
             return false;
         }

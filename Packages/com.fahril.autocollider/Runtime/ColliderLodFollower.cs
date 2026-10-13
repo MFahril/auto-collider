@@ -72,8 +72,8 @@ namespace AutoCollider
             if (level < 0 || level == ActiveLevel) return;
             ActiveLevel = level;
             foreach (var entry in _group.Entries)
-                if (entry.Lod >= 0 && entry.Collider != null)
-                    entry.Collider.enabled = entry.Lod == level;
+                if (entry.Lod >= 0 && entry.IsAlive)
+                    entry.Enabled = entry.Lod == level;
         }
 
         private int ResolveLevel(int lod)
@@ -82,7 +82,7 @@ namespace AutoCollider
             foreach (var entry in _group.Entries)
             {
                 var l = entry.Lod;
-                if (l < 0 || entry.Collider == null) continue;
+                if (l < 0 || !entry.IsAlive) continue;
                 if (l <= lod && l > below) below = l;
                 if (l > lod && l < above) above = l;
             }

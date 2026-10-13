@@ -23,8 +23,12 @@ Status legend: ⬜ not started · 🟦 in progress · ✅ done · ⏸ blocked
 | M5 | Paint & skinned | 4 | ✅ |
 | M6 | Runtime bridge features | 5 | ✅ |
 | M7 | Polish & release | 1 | ✅ |
+| M8 | 2D core generation | 1, 2, 3, 5 | ✅ |
+| M9 | 2D editing, painting & tilemaps | 4 | ⬜ |
+| M10 | 2D runtime, skeletons, Doctor & release | 5 | ⬜ |
 
 Criteria: 1 clean UI · 2 optimize · 3 multi-object · 4 scene editing · 5 multi-collider bridge.
+2D design (decided 2026-10-13): one Collider Group for both kinds (an entry holds a `Collider` or a `Collider2D`); sources = sprites, tilemaps, flat meshes (2.5D), sprite skeletons (2D Animation, optional via reflection); no new package dependencies (built-in `physics2d` + `tilemap` modules only).
 
 ---
 
@@ -204,6 +208,49 @@ Tests (84 EditMode, all green, ~5 s)
 
 ---
 
+## M8 — 2D core generation ✅ (package 1.1.0)
+
+- [x] Runtime: `ColliderEntry` holds `Collider` **or** `Collider2D` (`_collider2D`, `Is2D`, `Component`, `IsAlive`, `Enabled` / `IsTrigger` / `Bounds` for both; old data stays 3D); `ColliderGroup` bulk API, lookup (`Dictionary<Component, …>`), `LiveCount`, `WorldBounds`, `Where`, `RemoveMissing` cover both + `SetPhysicsMaterial(PhysicsMaterial2D)`, `TryGetEntry(Collider2D)`, `SetLayerOverrides` on 2D; LOD follower toggles either kind
+- [x] **Separate `[Colliders 2D]` container** (`ColliderGroup.Container2D`, `IsInContainer`) — found by a test: Unity refuses a Collider2D on a GameObject that has a 3D Collider (and vice versa), so mixed targets need both containers
+- [x] Settings: `Dimension` (Auto / 3D / 2D), `Strategy2D` (Auto / BestPrimitive / Box / Circle / Capsule / ConvexPolygon / Polygon / Edge / PerBone — Per Bone = Auto until M10), `OutlineSource` (Auto / PhysicsShape / SpriteMesh / Alpha), `AlphaThreshold`, `OutlineResolution`, `Material2D`; `package.json` gets `com.unity.modules.physics2d` + `com.unity.modules.tilemap`
+- [x] `Editor/Core2D` (fits in the target's existing world-sized `TargetSpace`, XY plane — no separate 2D space type needed):
+  - `SpriteSource` — Auto traces the opaque pixels (RenderTexture blit, no Read/Write; measured: Unity's generated physics shape / tight mesh for a 64 px disc is a 9-point enclosing polygon, radius +16 %), falls back to the physics shape, then the mesh outline (`BoundaryLoops`); sliced / tiled sprites use `renderer.size`; flipX / flipY; flat meshes = rasterized silhouette of `MeshSource.Read` triangles; per-batch sprite outline cache
+  - `OutlineTracer` (Burst triangle raster, scanline polygon raster, mask raster → boundary-edge loops, solid on the left: outer CCW / holes CW, diagonal cells kept apart, straight runs collapsed), `PolygonSimplifier` (closed Douglas–Peucker; retries at half tolerance when a loop would self-intersect, cross another loop or flip; island removal), `Polygon2D` (area, even-odd containment, nesting orientation, offset, collinear removal), `Outline2D` (area, outer points, hull, convexity)
+  - Fitters: `Box2DFitter` (AABB / min-area rect via `GeometryUtils.ConvexHull2D` + `MinAreaRectDirection`, angle canonicalized to ±45°), `CircleFitter` (iterative Welzl, fixed seed), `Capsule2DFitter` (X / Y / principal axis; 4 % cap slack so pixel stair corners don't stretch it — a 0.375 × 2.5 pill measured 2.75 → 2.54)
+- [x] `Editor/Generation2D`: `FittedShape2D`, strategies (`IColliderStrategy2D`: primitive / polygon / Auto2D = primitive filling ≥ Primitive Fit Threshold → convex polygon if convexity ≥ Convexity Threshold → simplified polygon; near-circular capsules become circles; Edge loops for hollow outlines), `GenerationPipeline2D` (`Is2D` routing, Combined = raster union, inflate incl. polygon offset, `FitCache.Fit2D`), `ColliderWriter2D` (Box / Circle / Capsule / Polygon (paths + holes) / Edge 2D; rotated primitives on a z-rotated child under equal X / Y scale only; circle ÷ max |scale|); `ColliderWriter` writes `Shapes2D`, removal handles `Collider2D`, `ReplaceAll` covers 2D
+- [x] UI: Generate tab "2D (Sprites & Flat Meshes)" foldout + hint, target rows count sprites, `ShapeDrawing2D` preview, inspector 2D rows (kind chip "Box 2D"…, toggles, ping + frame on click), bulk Physics Material 2D (shown only with 2D entries), 2D layer overrides, 2D `ColliderCost` ranking; `TargetResult.Warn` de-duplicates
+- [x] Tests (35 new): fitters (exact AABB, min-area rotation, Welzl ±1 % deterministic, capsule axes, rotated capsule, best primitive, rotated box only when allowed), outlines (square, ring with CW hole, diagonal cells, triangle-union raster, staircase-circle simplify, corners / collinear / islands, no crossing, boundary loops, nesting), generation (square → box, disc → circle, L → convex polygon (fills 0.86 of its hull) / polygon, ring keeps its hole, every outline source, non-uniform scale circle, rotated plank → rotated child, flat mesh with Rigidbody2D vs 3D, Dimension 2D / 3D, 10 sprites one Undo + user Collider2D untouched, combined union, edge loops, remove, mixed group API, mixed 3D + 2D containers, repeated sprites cached)
+- [x] 2D dev scene `Assets/AutoCollider Dev/M8 2D Test Scene.unity` + sprites in `Assets/AutoCollider Dev/2D/` (crate, ball, ring, L bracket, rotated plank, pill, stretched ball, star, flat box with a kinematic `Rigidbody2D`); tilemap props arrive with M9
+
+**Done when:** selecting sprites / flat meshes and pressing Shift+Alt+C makes fitting 2D colliders in one Undo step; 2D and 3D tests green. → *Verified 2026-10-13: 198/198 EditMode + 8/8 PlayMode tests, console clean. Auto on the 2D dev scene (9 objects, 16 ms): crate box 1 × 1, ball circle r 0.50, ring polygon with its hole (32 points, 2 paths), L polygon, rotated plank box 2.5 × 0.5 on a 30° child, pill capsule 0.75 × 2.54, stretched ball horizontal capsule, star polygon (34 points), flat box 2D box 1 × 2; live preview draws every 2D shape on its sprite.*
+
+---
+
+## M9 — 2D editing, painting & tilemaps ⬜ (package 1.2.0)
+
+- [ ] `ColliderShapes2D` (`Collider2D` ↔ `FittedShape2D`, exact round trip); `ColliderOperations` dispatch by `Is2D`: duplicate, delete, mirror X / Y, merge → convex polygon / box, convert, refit to the outline, inflate / deflate (analytic / polygon offset) — one Undo each
+- [ ] Edit tool: 2D picking (`OverlapPoint` on the collider's z plane), 2D box / circle / capsule handles, move / rotate around z, polygon point editing (drag, insert on edge, Ctrl+click delete, simplify slider), V snaps to sprite outline points, 2D drawing
+- [ ] Paint on sprites / flat meshes (`PaintMesh` from the sprite mesh) → `RegionFitter2D`; regions in the recipe like 3D
+- [ ] Tilemaps (`TilemapSetup`): *Composite* mode (TilemapCollider2D + CompositeCollider2D + static Rigidbody2D, owned + undoable) and *Baked* mode (simplified composite paths → owned Polygon / Edge colliders; live tilemap collider disabled, restored on Remove)
+- [ ] Tests: round trips, each op + undo, polygon point edit, picking order, tilemap setup / bake / remove + undo (in-memory Tiles), painted 2D region → identical regenerate
+
+**Done when:** every 2D collider can be edited in the Scene view with one Undo per action; tilemaps get merged or baked colliders in one click.
+
+---
+
+## M10 — 2D runtime, skeletons, Doctor & release ⬜ (package 1.3.0)
+
+- [ ] `ColliderGroup` 2D events `CollisionEnter2D / Stay2D / Exit2D (entry, Collision2D)`, `TriggerEnter2D / Stay2D / Exit2D (entry, Collider2D)`; `ColliderRelay2D` + `ColliderStayRelay2D` on first subscription; exact part via `Collision2D.otherCollider` + canonical receiver; `TriggerPairs2D` via `Collider2D.IsTouching`; `RefreshRouting` covers both
+- [ ] Sprite skeletons: `BoneFitter2D` (core `Sprite.GetBones / GetBindPoses / GetVertexAttribute<BoneWeight>`; `SpriteSkin.boneTransforms` via reflection, so the 2D Animation package stays optional); Capsule2D per bone on bone children; Auto uses it with a SpriteSkin; symmetric L / R
+- [ ] `SpriteColliderSwitcher`: per-sprite path table baked in the editor (Animator clips or a sprite list), swaps `PolygonCollider2D` paths when the sprite changes
+- [ ] Doctor 2D: too many polygon points → Simplify; TilemapCollider2D without composite → Set Up; 2D collider under a 3D Rigidbody / 3D collider under a Rigidbody2D; 2D object rotated on x / y; duplicate 2D colliders; circle / capsule under non-uniform scale; sprite without physics shape (info)
+- [ ] Demo2D sample (procedural sprite textures, tilemap, flat mesh, sprite-swap character), manual §2D, README, CHANGELOG, `UiTooltipTests` extended, perf: 1,000 sprites + 200×200 tilemap
+- [ ] PlayMode tests: compound Rigidbody2D part once, shared-container triggers, Stay2D only when subscribed, switcher follows the sprite, skeleton colliders follow bones (when the package is present)
+
+**Done when:** 2D events report the right part; the Doctor finds and fixes seeded 2D issues; the 2D sample imports and plays.
+
+---
+
 ## Backlog / ideas
 
 - Optional VHACD adapter behind `IColliderStrategy` (only if own decomposition quality is insufficient)
@@ -235,3 +282,5 @@ Tests (84 EditMode, all green, ~5 s)
 | 2026-10-12 | M5 ✅ | Paint mode (brush, grow / connected, regions stored in the recipe, identical regenerate), per-bone colliders for skinned meshes (follow animation, L/R symmetry), Auto → per bone on skinned; 134 tests green; package 0.6.0 |
 | 2026-10-12 | M6 ✅ | Group collision / trigger events with the hit part (relays, no double reports), bulk layer overrides + contacts, Animated Mesh Collider (throttled), per-LOD colliders + LOD follower; 145 EditMode + 8 PlayMode tests green; package 0.7.0 |
 | 2026-10-12 | M7 ✅ | Collider Doctor (11 checks, one-click fixes, Fix All), hierarchy badge, user manual, Demo sample, perf pass (1,000-object batch 55 s → 3.9 s: capped OBB directions, faster capped hull, batch fit cache), tooltip guard, test-scene leak fix; 163 EditMode + 8 PlayMode tests green; package 1.0.0 |
+| 2026-10-13 | Plan | 2D support planned as M8 (core generation, 1.1.0), M9 (editing, painting, tilemaps, 1.2.0), M10 (runtime, skeletons, Doctor, release, 1.3.0) |
+| 2026-10-13 | M8 ✅ | 2D generation: sprites (pixel tracing), flat meshes, box / circle / capsule / polygon / edge 2D fitters, Auto 2D, separate 2D container, inspector + preview; 198 EditMode + 8 PlayMode tests green; package 1.1.0 |

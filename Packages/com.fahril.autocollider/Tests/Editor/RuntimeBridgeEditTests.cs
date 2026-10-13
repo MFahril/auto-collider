@@ -181,8 +181,8 @@ namespace AutoCollider.Editor.Tests
         [Test]
         public void Entry_LodDefaultsToEveryLod()
         {
-            Assert.That(new ColliderEntry(null, "x", 0, true).Lod, Is.EqualTo(-1));
-            Assert.That(new ColliderEntry(null, "x", 0, true) { Lod = 3 }.Lod, Is.EqualTo(3));
+            Assert.That(new ColliderEntry((Collider)null, "x", 0, true).Lod, Is.EqualTo(-1));
+            Assert.That(new ColliderEntry((Collider)null, "x", 0, true) { Lod = 3 }.Lod, Is.EqualTo(3));
         }
 
         [Test]

@@ -25,7 +25,7 @@ namespace AutoCollider.Editor
         public void Apply(TargetResult result, GenerationSettings settings)
         {
             var target = result.Target;
-            if (target == null || result.Shapes.Count == 0) return;
+            if (target == null || result.ShapeCount == 0) return;
 
             var group = target.GetComponent<ColliderGroup>();
             if (group == null) group = Undo.AddComponent<ColliderGroup>(target);
@@ -63,6 +63,22 @@ namespace AutoCollider.Editor
                 RecordGroup(group, Strings.UndoGenerate);
                 var partId = shape.RegionId >= 0 ? shape.RegionId : i;
                 group.AddEntry(new ColliderEntry(collider, shape.Label, partId, generated: true, OwnsHost(collider, group)) { Lod = shape.Lod });
+                result.CollidersCreated++;
+            }
+
+            var partOffset = result.Shapes.Count;
+            for (var i = 0; i < result.Shapes2D.Count; i++)
+            {
+                var shape = result.Shapes2D[i];
+                var collider2D = ColliderWriter2D.Create(shape, EnsureContainer2D(group), space);
+                if (collider2D == null) continue;
+
+                collider2D.isTrigger = settings.IsTrigger;
+                collider2D.sharedMaterial = settings.Material2D;
+                if (shape.Lod > 0) collider2D.enabled = false;
+                RecordGroup(group, Strings.UndoGenerate);
+                group.AddEntry(new ColliderEntry(collider2D, shape.Label, partOffset + i, generated: true, OwnsHost(collider2D, group))
+                    { Lod = shape.Lod });
                 result.CollidersCreated++;
             }
 
@@ -119,9 +135,9 @@ namespace AutoCollider.Editor
 
             if (group.Entries.Count == 0)
             {
-                var container = group.Container;
-                if (container != null && IsDisposableObject(container.gameObject))
-                    Undo.DestroyObjectImmediate(container.gameObject);
+                foreach (var container in new[] { group.Container, group.Container2D })
+                    if (container != null && IsDisposableObject(container.gameObject))
+                        Undo.DestroyObjectImmediate(container.gameObject);
                 Undo.DestroyObjectImmediate(group);
             }
             else
@@ -131,9 +147,10 @@ namespace AutoCollider.Editor
             return removed;
         }
 
-        /// <summary>True when the collider got a GameObject of its own (not the shared container).</summary>
-        internal static bool OwnsHost(Collider collider, ColliderGroup group) =>
-            collider != null && collider.transform != group.Container && collider.transform != group.transform;
+        /// <summary>True when the collider (3D or 2D) got a GameObject of its own (not the shared container).</summary>
+        internal static bool OwnsHost(Component collider, ColliderGroup group) =>
+            collider != null && collider.transform != group.Container && collider.transform != group.Container2D
+            && collider.transform != group.transform;
 
         internal Collider CreateCollider(FittedShape shape, Transform container, in TargetSpace space, string libraryName)
         {
@@ -261,6 +278,29 @@ namespace AutoCollider.Editor
         }
 
         /// <summary>
+        /// Container for 2D colliders, separate from the 3D one: Unity refuses a Collider2D on a GameObject that already has a
+        /// 3D Collider (and the other way round).
+        /// </summary>
+        internal Transform EnsureContainer2D(ColliderGroup group)
+        {
+            if (group.Container2D != null) return group.Container2D;
+
+            var target = group.gameObject;
+            var go = new GameObject(Container2DName(_containerName));
+            go.transform.SetParent(target.transform, false);
+            go.layer = target.layer;
+            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(target));
+            Undo.RegisterCreatedObjectUndo(go, Strings.UndoGenerate);
+            RecordGroup(group, Strings.UndoGenerate);
+            group.Container2D = go.transform;
+            return go.transform;
+        }
+
+        /// <summary>"[Colliders]" → "[Colliders 2D]".</summary>
+        internal static string Container2DName(string containerName) =>
+            containerName.EndsWith("]") ? containerName.Substring(0, containerName.Length - 1) + " 2D]" : containerName + " 2D";
+
+        /// <summary>
         /// Record the group right before changing it. Must come <b>after</b> any other Undo call (create / add / destroy):
         /// those flush pending records, so a record taken earlier would capture "no change" and the edit would be lost.
         /// </summary>
@@ -301,18 +341,21 @@ namespace AutoCollider.Editor
         {
             var removed = RemoveEntries(group, e => !e.Locked);
 
-            var locked = new HashSet<Collider>();
+            var locked = new HashSet<Component>();
             foreach (var entry in group.Entries)
-                if (entry.Collider != null) locked.Add(entry.Collider);
+                if (entry.IsAlive) locked.Add(entry.Component);
 
             foreach (var collider in group.GetComponentsInChildren<Collider>(true))
+                if (!locked.Contains(collider) && DestroyCollider(collider, group.Container))
+                    removed++;
+            foreach (var collider in group.GetComponentsInChildren<Collider2D>(true))
                 if (!locked.Contains(collider) && DestroyCollider(collider, group.Container))
                     removed++;
             return removed;
         }
 
-        /// <summary>Destroy a collider; also its GameObject when that is a dedicated child of the container.</summary>
-        internal static bool DestroyCollider(Collider collider, Transform container)
+        /// <summary>Destroy a collider (3D or 2D); also its GameObject when that is a dedicated child of the container.</summary>
+        internal static bool DestroyCollider(Component collider, Transform container)
         {
             if (collider == null) return false;
             var go = collider.gameObject;
@@ -327,7 +370,7 @@ namespace AutoCollider.Editor
         /// <summary>Destroy an entry's collider, and its GameObject when Auto Collider created that object for it (e.g. under a bone).</summary>
         internal static bool DestroyEntryCollider(ColliderEntry entry, Transform container)
         {
-            var collider = entry.Collider;
+            var collider = entry.Component;
             if (collider == null) return false;
             var go = collider.gameObject;
             if (!entry.OwnsGameObject) return DestroyCollider(collider, container);

@@ -197,7 +197,7 @@ namespace AutoCollider.Editor
         {
             var missing = 0;
             foreach (var entry in group.Entries)
-                if (entry.Collider == null) missing++;
+                if (!entry.IsAlive) missing++;
             if (missing == 0) return;
             issues.Add(new DoctorIssue(DoctorCheck.MissingEntries, DoctorSeverity.Warning, group,
                     string.Format(CultureInfo.CurrentCulture, Strings.DoctorMissingEntries, missing))

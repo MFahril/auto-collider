@@ -17,6 +17,7 @@ change undoable, and only ever removes colliders it created itself.
 11. [Settings reference](#11-settings-reference)
 12. [Shortcuts and menus](#12-shortcuts-and-menus)
 13. [Tips, limits and troubleshooting](#13-tips-limits-and-troubleshooting)
+14. [2D colliders](#14-2d-colliders)
 
 ---
 
@@ -294,3 +295,42 @@ active.
 - **Prefabs:** instances get overrides you can apply. Open the prefab to change the asset itself.
 - **Undoing a generation** can leave unused mesh sub-assets in the generated-mesh folder. They are harmless and you can
   delete the folder content when nothing references it.
+
+## 14. 2D colliders
+
+Select sprites (or flat meshes) and generate as usual: they get **2D colliders** in the same Collider Group, on a
+`[Colliders 2D]` child. A GameObject can't hold 3D and 2D colliders together, so objects with both kinds of renderers get
+both containers.
+
+**What becomes 2D** (*Generate ▸ 2D ▸ Dimension*):
+- *Auto*: sprites get 2D colliders; meshes get 3D colliders, unless a **Rigidbody2D** moves them (then 2D).
+- *2D*: everything gets 2D colliders. A mesh's collider follows its silhouette seen along the object's Z axis.
+- *3D*: only 3D colliders; sprites are skipped (with a warning).
+
+**Strategy 2D:**
+
+| Strategy | Result |
+|---|---|
+| **Auto** | Box / circle / capsule when one fills the outline (Primitive Fit Threshold), else one convex polygon when the outline is convex enough (Convexity Threshold), else the simplified outline polygon |
+| Best Primitive | Tightest of box, circle and capsule |
+| Box / Circle / Capsule | That shape (box and capsule rotated when allowed and tighter) |
+| Convex Polygon | One convex polygon around the outline |
+| Polygon | The simplified outline, holes included |
+| Edge | Edge loops along the outline (hollow: only the border collides) |
+
+**Outline Source:**
+- *Auto* traces the opaque pixels (exact; no Read/Write needed). Tune it with *Alpha Threshold* (how opaque counts as
+  solid) and *Outline Resolution* (cells along the longest side).
+- *Physics Shape* uses the sprite's physics shape. Use it for a **custom physics shape** drawn in the Sprite Editor.
+  Unity's generated one is a coarse polygon around the sprite.
+- *Sprite Mesh* uses the render mesh outline.
+
+**Shared settings:**
+- **Quality** sets how closely polygons follow the outline.
+- **Min Island Size** drops specks.
+- **Inflate** grows or shrinks every 2D shape.
+- **Granularity: Combined** merges several sprites into one outline.
+- **Allow Rotation** permits rotated boxes and capsules. They sit on their own child, rotated around Z, and need equal
+  X/Y scale.
+
+2D physics ignores an object's X/Y rotation, so keep 2D objects facing the camera.

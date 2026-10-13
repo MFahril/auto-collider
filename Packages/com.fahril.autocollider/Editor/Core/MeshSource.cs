@@ -15,23 +15,24 @@ namespace AutoCollider.Editor
     internal static class MeshSource
     {
         /// <summary>Renderers that contribute meshes to <paramref name="target"/>, after all settings filters.</summary>
-        public static List<Renderer> CollectRenderers(GameObject target, GenerationSettings settings, ICollection<string> warnings)
+        /// <param name="includeSprites">Also return sprite renderers (they have no mesh; only the 2D pipeline reads them).</param>
+        public static List<Renderer> CollectRenderers(GameObject target, GenerationSettings settings, ICollection<string> warnings,
+            bool includeSprites = false)
         {
             var renderers = settings.IncludeChildren
                 ? target.GetComponentsInChildren<Renderer>(true)
                 : target.GetComponents<Renderer>();
 
             var group = target.GetComponent<ColliderGroup>();
-            var container = group != null ? group.Container : null;
             var excludedByLod = settings.Lod0Only ? HigherLodRenderers(target) : null;
             var namePattern = BuildPattern(settings.ExcludeNamePattern, warnings);
 
             var result = new List<Renderer>();
             foreach (var renderer in renderers)
             {
-                if (SharedMesh(renderer) == null) continue;
+                if (SharedMesh(renderer) == null && !(includeSprites && SpriteSource.IsSprite(renderer))) continue;
                 if (!settings.IncludeInactive && (!renderer.enabled || !renderer.gameObject.activeInHierarchy)) continue;
-                if (container != null && renderer.transform.IsChildOf(container)) continue;
+                if (group != null && group.IsInContainer(renderer.transform)) continue;
                 if (IsInsideNestedGroup(renderer.transform, target.transform)) continue;
                 if (excludedByLod != null && excludedByLod.Contains(renderer)) continue;
                 if (namePattern != null && namePattern.IsMatch(renderer.gameObject.name)) continue;

@@ -445,6 +445,24 @@ namespace AutoCollider.Editor
         public const string AnimatedCostHz = "{0:0.#} times per second";
         public const string AnimatedSharedHint = "Shared Mesh: the collider uses the bind pose and is only refreshed when the mesh is swapped (no per-frame cost).";
 
+        // 2D (M8)
+        public const string Section2D = "2D (Sprites & Flat Meshes)";
+        public const string Hint2D = "Sprites get 2D colliders; meshes too when a Rigidbody2D moves them or Dimension is 2D. Granularity, Allow Rotation, Inflate, Quality (outline detail), Min Island Size and the Auto thresholds apply to 2D as well.";
+        public const string WarningNoPhysicsShape = "Sprite '{0}' has no physics shape (enable Generate Physics Shape in its import settings) — its mesh outline was used.";
+        public const string WarningAlphaUnavailable = "Sprite '{0}' is packed tightly in an atlas, so its pixels can't be traced — its mesh outline was used.";
+        public const string WarningSpritesSkipped3D = "{0} sprite(s) skipped: Dimension is 3D (sprites need 2D colliders).";
+        public const string BulkMaterial2D = "Physics Material 2D";
+        public const string BulkMaterial2DTooltip = "Assign this 2D physics material to every 2D collider in the group.";
+        public const string KindCircle = "Circle";
+        public const string KindPolygon = "Polygon";
+        public const string KindConvexPolygon = "Convex Polygon";
+        public const string KindEdge = "Edge";
+        public const string KindBox2D = "Box 2D";
+        public const string KindCircle2D = "Circle 2D";
+        public const string KindCapsule2D = "Capsule 2D";
+        public const string KindPolygon2D = "Polygon 2D";
+        public const string KindEdge2D = "Edge 2D";
+
         // Collider kinds
         public const string KindBox = "Box";
         public const string KindSphere = "Sphere";

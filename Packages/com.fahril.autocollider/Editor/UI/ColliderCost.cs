@@ -13,10 +13,23 @@ namespace AutoCollider.Editor
         {
             var total = 0f;
             foreach (var entry in entries)
-                if (entry.Collider != null && entry.Collider.enabled)
-                    total += Estimate(entry.Collider);
+            {
+                if (!entry.IsAlive || !entry.Enabled) continue;
+                total += entry.Collider != null ? Estimate(entry.Collider) : Estimate(entry.Collider2D);
+            }
             return total;
         }
+
+        /// <summary>2D: circle &lt; capsule &lt; box &lt; polygon (grows with its points) &lt; edge chains.</summary>
+        public static float Estimate(Collider2D collider) => collider switch
+        {
+            CircleCollider2D => 0.8f,
+            CapsuleCollider2D => 1f,
+            BoxCollider2D => 1.2f,
+            PolygonCollider2D polygon => 1.5f + polygon.GetTotalPointCount() / 16f,
+            EdgeCollider2D edge => 2f + edge.pointCount / 8f,
+            _ => 2f,
+        };
 
         public static float Estimate(Collider collider) => collider switch
         {
@@ -43,13 +56,19 @@ namespace AutoCollider.Editor
             return new string('●', filled) + new string('○', 5 - filled);
         }
 
-        public static string KindName(Collider collider) => collider switch
+        public static string KindName(Component collider) => collider switch
         {
             BoxCollider => Strings.KindBox,
             SphereCollider => Strings.KindSphere,
             CapsuleCollider => Strings.KindCapsule,
             MeshCollider { convex: true } => Strings.KindConvex,
             MeshCollider => Strings.KindMesh,
+            BoxCollider2D => Strings.KindBox2D,
+            CircleCollider2D => Strings.KindCircle2D,
+            CapsuleCollider2D => Strings.KindCapsule2D,
+            PolygonCollider2D => Strings.KindPolygon2D,
+            EdgeCollider2D => Strings.KindEdge2D,
+            null => string.Empty,
             _ => collider.GetType().Name,
         };
 

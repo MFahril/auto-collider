@@ -23,6 +23,9 @@ namespace AutoCollider.Editor
         private HelpBox _missingBox;
         private Button _clearRegions;
         private Button _addLodFollower;
+        private VisualElement _material3D;
+        private VisualElement _material2D;
+        private VisualElement _contacts;
         private int _stateHash;
 
         private ColliderGroup Group => (ColliderGroup)target;
@@ -106,9 +109,10 @@ namespace AutoCollider.Editor
             bulk.AddToClassList("ac-foldout");
             bulk.Add(BulkTrigger());
             bulk.Add(BulkLayer());
-            bulk.Add(BulkMaterial());
+            bulk.Add(_material3D = BulkMaterial());
+            bulk.Add(_material2D = BulkMaterial2D());
             bulk.Add(BulkLayerOverrides());
-            bulk.Add(BulkContacts());
+            bulk.Add(_contacts = BulkContacts());
             root.Add(bulk);
 
             // Runtime (events, LOD)
@@ -169,7 +173,7 @@ namespace AutoCollider.Editor
             _stateHash = ComputeStateHash();
 
             _rows.Clear();
-            _rows.AddRange(Group.Entries.Where(e => e.Collider != null));
+            _rows.AddRange(Group.Entries.Where(e => e.IsAlive));
             _list.style.height = Mathf.Clamp(_rows.Count, 1, 12) * RowHeight + 4;
             _list.RefreshItems();
 
@@ -183,7 +187,7 @@ namespace AutoCollider.Editor
             _removeButton.text = string.Format(Strings.RemoveButton, removable);
             _removeButton.SetEnabled(removable > 0);
 
-            var missing = Group.Entries.Count(e => e.Collider == null);
+            var missing = Group.Entries.Count(e => !e.IsAlive);
             _missingBox.text = string.Format(Strings.MissingEntries, missing);
             _missingBox.EnableInClassList("ac-hidden", missing == 0);
 
@@ -193,6 +197,11 @@ namespace AutoCollider.Editor
 
             var canFollow = Groups.Any(g => !g.TryGetComponent<ColliderLodFollower>(out _) && g.GetComponentInChildren<LODGroup>(true) != null);
             _addLodFollower.EnableInClassList("ac-hidden", !canFollow);
+
+            var entries = Groups.SelectMany(g => g.Entries).ToList();
+            _material3D.EnableInClassList("ac-hidden", !entries.Any(e => e.Collider != null));
+            _material2D.EnableInClassList("ac-hidden", !entries.Any(e => e.Collider2D != null));
+            _contacts.EnableInClassList("ac-hidden", !entries.Any(e => e.Collider != null));
         }
 
         private int ComputeStateHash()
@@ -201,9 +210,9 @@ namespace AutoCollider.Editor
             foreach (var group in Groups)
             foreach (var entry in group.Entries)
             {
-                var c = entry.Collider;
+                var c = entry.Component;
                 hash = hash * 31 + (c != null ? c.GetEntityId().GetHashCode() : 0);
-                hash = hash * 31 + (c != null && c.enabled ? 1 : 0) + (c != null && c.isTrigger ? 2 : 0) + (entry.Locked ? 4 : 0);
+                hash = hash * 31 + (entry.Enabled ? 1 : 0) + (entry.IsTrigger ? 2 : 0) + (entry.Locked ? 4 : 0);
             }
             return hash;
         }
@@ -220,7 +229,12 @@ namespace AutoCollider.Editor
             label.AddToClassList("ac-entry-row__label");
             label.RegisterCallback<ClickEvent>(e =>
             {
-                if (!(row.userData is ColliderEntry entry) || entry.Collider == null) return;
+                if (!(row.userData is ColliderEntry entry) || !entry.IsAlive) return;
+                if (entry.Collider == null)
+                {
+                    Frame2D(entry);
+                    return;
+                }
                 var op = e.shiftKey ? SelectOp.Add : e.actionKey ? SelectOp.Toggle : SelectOp.Replace;
                 ColliderEditState.Select(entry.Collider, op);
                 ColliderToolCommands.ActivateTool();
@@ -240,7 +254,12 @@ namespace AutoCollider.Editor
             select.AddToClassList("ac-entry-row__select");
             select.clicked += () =>
             {
-                if (!(row.userData is ColliderEntry entry) || entry.Collider == null) return;
+                if (!(row.userData is ColliderEntry entry) || !entry.IsAlive) return;
+                if (entry.Collider == null)
+                {
+                    Frame2D(entry);
+                    return;
+                }
                 // Keep the group selected (the tool needs it) and select the collider inside the tool instead.
                 ColliderEditState.Select(entry.Collider);
                 ColliderToolCommands.ActivateTool();
@@ -261,9 +280,9 @@ namespace AutoCollider.Editor
         {
             if (index < 0 || index >= _rows.Count) return;
             var entry = _rows[index];
-            var collider = entry.Collider;
+            var collider = entry.Component;
             row.userData = entry;
-            row.EnableInClassList("ac-entry-row--selected", ColliderEditState.IsSelected(collider));
+            row.EnableInClassList("ac-entry-row--selected", entry.Collider != null && ColliderEditState.IsSelected(entry.Collider));
 
             row.Q<Image>("icon").image = AssetPreview.GetMiniTypeThumbnail(collider.GetType());
             var label = row.Q<Label>("label");
@@ -272,19 +291,19 @@ namespace AutoCollider.Editor
             var kindText = ColliderCost.KindName(collider);
             row.Q<Label>("kind").text = entry.Lod >= 0 ? string.Format(Strings.EntryKindLod, kindText, entry.Lod) : kindText;
 
-            Rebind(row.Q<Toggle>("enabled"), collider.enabled, value =>
+            Rebind(row.Q<Toggle>("enabled"), entry.Enabled, value =>
             {
                 Undo.RecordObject(collider, Strings.UndoEditCollider);
-                collider.enabled = value;
+                entry.Enabled = value;
             });
 
             var trigger = row.Q<Toggle>("trigger");
             var canTrigger = !(collider is MeshCollider { convex: false });
             trigger.SetEnabled(canTrigger);
-            Rebind(trigger, collider.isTrigger, value =>
+            Rebind(trigger, entry.IsTrigger, value =>
             {
                 Undo.RecordObject(collider, Strings.UndoEditCollider);
-                collider.isTrigger = value;
+                entry.IsTrigger = value;
             });
 
             Rebind(row.Q<Toggle>("locked"), entry.Locked, value =>
@@ -294,6 +313,14 @@ namespace AutoCollider.Editor
                 EditorUtility.SetDirty(Group);
                 Refresh();
             });
+        }
+
+        /// <summary>2D colliders aren't edited by the Scene tool yet: ping and frame them instead.</summary>
+        private static void Frame2D(ColliderEntry entry)
+        {
+            EditorGUIUtility.PingObject(entry.Component);
+            var view = SceneView.lastActiveSceneView;
+            if (view != null) view.Frame(entry.Bounds, false);
         }
 
         private static void Rebind(Toggle toggle, bool value, System.Action<bool> onChange)
@@ -345,13 +372,9 @@ namespace AutoCollider.Editor
         {
             var row = new VisualElement();
             row.AddToClassList("ac-row");
-            // Concave mesh colliders can't be triggers; leave them unchanged.
-            var on = new Button(() => ApplyToColliders(c =>
-                {
-                    if (!(c is MeshCollider { convex: false })) c.isTrigger = true;
-                }))
-                { text = Strings.BulkTriggerOn, tooltip = Strings.BulkTriggerTooltip };
-            var off = new Button(() => ApplyToColliders(c => c.isTrigger = false)) { text = Strings.BulkTriggerOff, tooltip = Strings.BulkTriggerTooltip };
+            // ColliderEntry.IsTrigger leaves concave mesh colliders unchanged (they can't be triggers).
+            var on = new Button(() => ApplyToEntries(e => e.IsTrigger = true)) { text = Strings.BulkTriggerOn, tooltip = Strings.BulkTriggerTooltip };
+            var off = new Button(() => ApplyToEntries(e => e.IsTrigger = false)) { text = Strings.BulkTriggerOff, tooltip = Strings.BulkTriggerTooltip };
             foreach (var b in new[] { on, off })
             {
                 b.AddToClassList("ac-button");
@@ -387,6 +410,23 @@ namespace AutoCollider.Editor
             return row;
         }
 
+        private VisualElement BulkMaterial2D()
+        {
+            var row = new VisualElement();
+            row.AddToClassList("ac-row");
+            var material = new ObjectField(Strings.BulkMaterial2D) { objectType = typeof(PhysicsMaterial2D), tooltip = Strings.BulkMaterial2DTooltip };
+            material.AddToClassList("ac-row__grow");
+            row.Add(material);
+            var apply = new Button(() => ApplyToEntries(e =>
+                {
+                    if (e.Collider2D != null) e.Collider2D.sharedMaterial = material.value as PhysicsMaterial2D;
+                }))
+                { text = Strings.Apply, tooltip = Strings.BulkMaterial2DTooltip };
+            apply.AddToClassList("ac-button");
+            row.Add(apply);
+            return row;
+        }
+
         private VisualElement BulkLayerOverrides()
         {
             var box = new VisualElement();
@@ -406,11 +446,20 @@ namespace AutoCollider.Editor
             row.AddToClassList("ac-row");
             priority.AddToClassList("ac-row__grow");
             row.Add(priority);
-            var apply = new Button(() => ApplyToColliders(c =>
+            var apply = new Button(() => ApplyToEntries(e =>
                 {
-                    c.includeLayers = include.value;
-                    c.excludeLayers = exclude.value;
-                    c.layerOverridePriority = priority.value;
+                    if (e.Collider != null)
+                    {
+                        e.Collider.includeLayers = include.value;
+                        e.Collider.excludeLayers = exclude.value;
+                        e.Collider.layerOverridePriority = priority.value;
+                    }
+                    else
+                    {
+                        e.Collider2D.includeLayers = include.value;
+                        e.Collider2D.excludeLayers = exclude.value;
+                        e.Collider2D.layerOverridePriority = priority.value;
+                    }
                 }))
                 { text = Strings.Apply, tooltip = Strings.BulkLayerOverridesTooltip };
             apply.AddToClassList("ac-button");
@@ -447,6 +496,7 @@ namespace AutoCollider.Editor
             Refresh();
         }
 
+        /// <summary>3D colliders only (physics material, contacts).</summary>
         private void ApplyToColliders(System.Action<Collider> change)
         {
             var colliders = Groups.SelectMany(g => g.Entries).Select(e => e.Collider).Where(c => c != null).ToArray();
@@ -455,12 +505,24 @@ namespace AutoCollider.Editor
             Refresh();
         }
 
+        /// <summary>Every live entry, 3D and 2D, as one Undo step.</summary>
+        private void ApplyToEntries(System.Action<ColliderEntry> change)
+        {
+            var entries = Groups.SelectMany(g => g.Entries).Where(e => e.IsAlive).ToList();
+            Undo.RecordObjects(entries.Select(e => (Object)e.Component).ToArray(), Strings.UndoEditCollider);
+            foreach (var e in entries) change(e);
+            Refresh();
+        }
+
         private void ApplyLayer(int layer)
         {
-            var objects = Groups.SelectMany(g => g.Entries).Select(e => e.Collider).Where(c => c != null)
+            var objects = Groups.SelectMany(g => g.Entries).Select(e => e.Component).Where(c => c != null)
                 .Select(c => c.gameObject).Where(go => go.GetComponent<Renderer>() == null).Distinct().ToList();
             foreach (var group in Groups)
+            {
                 if (group.Container != null) objects.Add(group.Container.gameObject);
+                if (group.Container2D != null) objects.Add(group.Container2D.gameObject);
+            }
             objects = objects.Distinct().ToList();
 
             Undo.RecordObjects(objects.ToArray(), Strings.UndoEditCollider);
@@ -469,8 +531,8 @@ namespace AutoCollider.Editor
 
         private static string Breakdown(IEnumerable<ColliderEntry> entries)
         {
-            var counts = entries.Where(e => e.Collider != null)
-                .GroupBy(e => ColliderCost.KindName(e.Collider))
+            var counts = entries.Where(e => e.IsAlive)
+                .GroupBy(e => ColliderCost.KindName(e.Component))
                 .OrderByDescending(g => g.Count())
                 .Select(g => $"{g.Count()} {g.Key}");
             var text = string.Join(" · ", counts);
